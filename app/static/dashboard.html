@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORCA Platform — Control Plane</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & tokens ──────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg0:    #0a0c0e;
+  --bg1:    #0f1215;
+  --bg2:    #151a1f;
+  --bg3:    #1c2229;
+  --bg4:    #232c35;
+  --line:   #1f2a33;
+  --line2:  #2a3844;
+  --text0:  #e2eaf0;
+  --text1:  #9aadb8;
+  --text2:  #576878;
+  --amber:  #f5a623;
+  --amber2: #7a4f0a;
+  --green:  #3ddc84;
+  --green2: #1a5c38;
+  --red:    #ff5f5f;
+  --red2:   #6b1a1a;
+  --blue:   #4da3e8;
+  --blue2:  #1a3a5c;
+  --teal:   #2dd4bf;
+  --mono:   'IBM Plex Mono', monospace;
+  --sans:   'IBM Plex Sans', sans-serif;
+  --radius: 3px;
+  --radius2: 6px;
+}
+
+html, body { height: 100%; background: var(--bg0); color: var(--text0); font-family: var(--sans); font-size: 13px; line-height: 1.5; overflow-x: hidden; }
+
+/* ── Scrollbar ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg1); }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+
+/* ── Layout ──────────────────────────────────────────────── */
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ── Topbar ──────────────────────────────────────────────── */
+#topbar {
+  display: flex; align-items: center; gap: 16px;
+  height: 48px; padding: 0 20px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  position: relative;
+}
+#topbar::after {
+  content: '';
+  position: absolute; bottom: -1px; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, var(--amber) 0%, transparent 60%);
+  opacity: .35;
+}
+.logo {
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  color: var(--amber); letter-spacing: .08em; white-space: nowrap;
+}
+.logo span { color: var(--text2); font-weight: 400; }
+#status-bar { display: flex; gap: 12px; align-items: center; margin-left: 8px; }
+.status-pill {
+  display: flex; align-items: center; gap: 5px;
+  font-family: var(--mono); font-size: 10px; color: var(--text1);
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse-green 2s ease-in-out infinite; }
+.dot-amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.dot-red   { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+.dot-gray  { background: var(--text2); }
+@keyframes pulse-green { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+#key-input-wrap {
+  margin-left: auto; display: flex; align-items: center; gap: 8px;
+}
+#key-input-wrap label { font-family: var(--mono); font-size: 10px; color: var(--text2); letter-spacing:.06em; }
+#api-key-field {
+  background: var(--bg0); border: 1px solid var(--line2); border-radius: var(--radius);
+  color: var(--text0); font-family: var(--mono); font-size: 11px;
+  padding: 4px 10px; width: 220px; outline: none;
+}
+#api-key-field:focus { border-color: var(--amber); }
+#connect-btn {
+  background: var(--amber2); border: 1px solid var(--amber); border-radius: var(--radius);
+  color: var(--amber); font-family: var(--mono); font-size: 10px; font-weight: 600;
+  padding: 4px 12px; cursor: pointer; letter-spacing: .06em;
+  transition: background .15s;
+}
+#connect-btn:hover { background: #a36516; }
+#refresh-btn {
+  background: transparent; border: 1px solid var(--line2); border-radius: var(--radius);
+  color: var(--text1); font-family: var(--mono); font-size: 10px;
+  padding: 4px 10px; cursor: pointer; transition: border-color .15s, color .15s;
+}
+#refresh-btn:hover { border-color: var(--teal); color: var(--teal); }
+#last-refresh { font-family: var(--mono); font-size: 10px; color: var(--text2); }
+
+/* ── Tabs ────────────────────────────────────────────────── */
+#tabs {
+  display: flex; gap: 0; align-items: flex-end;
+  background: var(--bg1); border-bottom: 1px solid var(--line);
+  padding: 0 20px; flex-shrink: 0;
+}
+.tab {
+  padding: 10px 18px; font-family: var(--mono); font-size: 10px; font-weight: 500;
+  letter-spacing: .08em; color: var(--text2); cursor: pointer;
+  border-bottom: 2px solid transparent; transition: color .15s, border-color .15s;
+  user-select: none;
+}
+.tab:hover { color: var(--text1); }
+.tab.active { color: var(--amber); border-bottom-color: var(--amber); }
+
+/* ── Main content ────────────────────────────────────────── */
+#content { flex: 1; overflow-y: auto; padding: 20px; }
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ── Grid + card primitives ──────────────────────────────── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+.card {
+  background: var(--bg2); border: 1px solid var(--line);
+  border-radius: var(--radius2); padding: 16px; position: relative; overflow: hidden;
+}
+.card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, var(--line2), transparent);
+}
+.card-title {
+  font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .12em;
+  color: var(--text2); text-transform: uppercase; margin-bottom: 10px;
+}
+.card-value {
+  font-family: var(--mono); font-size: 28px; font-weight: 600;
+  color: var(--text0); line-height: 1;
+}
+.card-sub { font-family: var(--mono); font-size: 10px; color: var(--text2); margin-top: 4px; }
+.card-accent-amber .card-value { color: var(--amber); }
+.card-accent-green .card-value  { color: var(--green); }
+.card-accent-red .card-value    { color: var(--red); }
+.card-accent-blue .card-value   { color: var(--blue); }
+.card-accent-teal .card-value   { color: var(--teal); }
+
+.section-title {
+  font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .14em;
+  color: var(--text2); text-transform: uppercase; margin: 20px 0 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title::after { content:''; flex:1; height:1px; background: var(--line); }
+
+/* ── Table ───────────────────────────────────────────────── */
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius2); }
+table { width: 100%; border-collapse: collapse; }
+thead tr { background: var(--bg3); }
+th {
+  padding: 8px 12px; text-align: left;
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  letter-spacing: .1em; color: var(--text2); text-transform: uppercase;
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+td {
+  padding: 8px 12px; border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: 11px; color: var(--text1);
+}
+tr:last-child td { border-bottom: none; }
+tbody tr { transition: background .1s; }
+tbody tr:hover { background: var(--bg3); }
+td.mono { font-family: var(--mono); }
+td.hi   { color: var(--text0); font-weight: 500; }
+td.dim  { color: var(--text2); }
+
+/* ── Badges ──────────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 7px; border-radius: 2px;
+  font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .08em;
+}
+.badge-green  { background: var(--green2);  color: var(--green);  border: 1px solid var(--green2); }
+.badge-amber  { background: var(--amber2);  color: var(--amber);  border: 1px solid var(--amber2); }
+.badge-red    { background: var(--red2);    color: var(--red);    border: 1px solid var(--red2); }
+.badge-blue   { background: var(--blue2);   color: var(--blue);   border: 1px solid var(--blue2); }
+.badge-gray   { background: var(--bg4);     color: var(--text2);  border: 1px solid var(--line2); }
+
+/* ── Bar chart (CSS) ─────────────────────────────────────── */
+.bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.bar-label { font-family: var(--mono); font-size: 10px; color: var(--text1); width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+.bar-track { flex: 1; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+.bar-fill  { height: 100%; border-radius: 3px; transition: width .5s ease; }
+.bar-fill-amber { background: var(--amber); }
+.bar-fill-green { background: var(--green); }
+.bar-fill-blue  { background: var(--blue); }
+.bar-fill-teal  { background: var(--teal); }
+.bar-val { font-family: var(--mono); font-size: 10px; color: var(--text2); width: 70px; text-align: right; flex-shrink: 0; }
+
+/* ── Latency sparkline ───────────────────────────────────── */
+.spark-wrap { display: flex; align-items: flex-end; gap: 2px; height: 32px; }
+.spark-bar { flex: 1; border-radius: 1px; transition: height .4s ease; min-height: 2px; }
+
+/* ── Node cards ──────────────────────────────────────────── */
+.node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.node-card {
+  background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius2); padding: 16px;
+  position: relative; overflow: hidden;
+  transition: border-color .2s;
+}
+.node-card:hover { border-color: var(--line2); }
+.node-card.healthy { border-left: 3px solid var(--green); }
+.node-card.degraded { border-left: 3px solid var(--amber); }
+.node-card.offline, .node-card.unknown { border-left: 3px solid var(--text2); }
+.node-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.node-id { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--text0); }
+.node-meta { font-family: var(--mono); font-size: 10px; color: var(--text2); margin-top: 2px; }
+.model-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+.chip {
+  padding: 2px 6px; background: var(--bg3); border: 1px solid var(--line2);
+  border-radius: 2px; font-family: var(--mono); font-size: 9px; color: var(--text1);
+}
+
+/* ── Pull progress ───────────────────────────────────────── */
+.job-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-bottom: 1px solid var(--line);
+  background: var(--bg2);
+}
+.job-row:last-child { border-bottom: none; }
+.job-info { flex: 1; min-width: 0; }
+.job-model { font-family: var(--mono); font-size: 11px; color: var(--text0); font-weight: 500; }
+.job-detail { font-family: var(--mono); font-size: 9px; color: var(--text2); margin-top: 2px; }
+.progress-track { height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+.progress-fill { height: 100%; border-radius: 2px; background: var(--amber); transition: width .3s ease; }
+.progress-fill.done { background: var(--green); }
+.progress-fill.error { background: var(--red); }
+
+/* ── Forms ───────────────────────────────────────────────── */
+.form-row { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 12px; flex-wrap: wrap; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group label { font-family: var(--mono); font-size: 9px; color: var(--text2); letter-spacing: .08em; text-transform: uppercase; }
+.inp {
+  background: var(--bg0); border: 1px solid var(--line2); border-radius: var(--radius);
+  color: var(--text0); font-family: var(--mono); font-size: 11px;
+  padding: 6px 10px; outline: none; min-width: 160px;
+}
+.inp:focus { border-color: var(--amber); }
+.inp-sm { min-width: 80px; }
+.btn {
+  padding: 6px 14px; border-radius: var(--radius); border: 1px solid;
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  letter-spacing: .06em; cursor: pointer; transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+.btn-amber { background: var(--amber2); border-color: var(--amber); color: var(--amber); }
+.btn-amber:hover { background: #a36516; }
+.btn-green { background: var(--green2); border-color: var(--green); color: var(--green); }
+.btn-green:hover { background: #256b47; }
+.btn-red { background: var(--red2); border-color: var(--red); color: var(--red); }
+.btn-red:hover { background: #8b2222; }
+.btn-ghost { background: transparent; border-color: var(--line2); color: var(--text1); }
+.btn-ghost:hover { border-color: var(--teal); color: var(--teal); }
+.btn-sm { padding: 3px 8px; font-size: 9px; }
+
+/* ── Metric sparkline (hourly) ───────────────────────────── */
+#hourly-chart { display: flex; align-items: flex-end; gap: 3px; height: 60px; padding: 4px 0; }
+.hour-bar { flex: 1; border-radius: 1px 1px 0 0; transition: height .4s ease, background .2s; cursor: default; min-height: 2px; position: relative; }
+.hour-bar:hover::after {
+  content: attr(data-tip); position: absolute; bottom: calc(100% + 4px); left: 50%;
+  transform: translateX(-50%); background: var(--bg4); border: 1px solid var(--line2);
+  padding: 3px 6px; border-radius: 2px;
+  font-family: var(--mono); font-size: 9px; color: var(--text0);
+  white-space: nowrap; z-index: 10; pointer-events: none;
+}
+
+/* ── Toast ───────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--bg3); border: 1px solid var(--line2); border-radius: var(--radius2);
+  padding: 10px 16px; font-family: var(--mono); font-size: 11px; color: var(--text0);
+  box-shadow: 0 8px 24px rgba(0,0,0,.6);
+  opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s;
+  pointer-events: none; z-index: 100;
+}
+#toast.show { opacity: 1; transform: translateY(0); }
+#toast.toast-ok  { border-left: 3px solid var(--green); }
+#toast.toast-err { border-left: 3px solid var(--red); }
+
+
+/* ── Playground / Bench styles ───────────────────────────── */
+.pg-layout { display: grid; grid-template-columns: 340px 1fr; gap: 12px; height: calc(100vh - 116px); }
+.pg-sidebar { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.pg-main { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.pg-output {
+  flex: 1; background: var(--bg0); border: 1px solid var(--line);
+  border-radius: var(--radius2); padding: 14px;
+  font-family: var(--mono); font-size: 12px; color: var(--text0);
+  overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+  min-height: 200px;
+}
+.pg-output .token { display: inline; }
+.pg-output .cursor { display: inline-block; width: 8px; height: 13px; background: var(--amber); vertical-align: middle; animation: blink .7s step-end infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.pg-stats {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  background: var(--bg2); border: 1px solid var(--line);
+  border-radius: var(--radius2); padding: 10px 14px;
+}
+.pg-stat { display: flex; flex-direction: column; gap: 2px; }
+.pg-stat-label { font-family: var(--mono); font-size: 9px; color: var(--text2); letter-spacing: .08em; }
+.pg-stat-value { font-family: var(--mono); font-size: 16px; font-weight: 600; color: var(--text0); }
+.pg-stat-value.hi-amber { color: var(--amber); }
+.pg-stat-value.hi-green  { color: var(--green); }
+.pg-stat-value.hi-teal   { color: var(--teal); }
+.pg-stat-value.hi-blue   { color: var(--blue); }
+textarea.inp {
+  resize: vertical; font-family: var(--mono); font-size: 11px;
+  line-height: 1.6; min-height: 80px;
+}
+/* Bench result rows */
+.bench-result-row {
+  display: grid; grid-template-columns: 1fr repeat(6, auto);
+  gap: 0; border-bottom: 1px solid var(--line);
+  align-items: center;
+}
+.bench-result-row:last-child { border-bottom: none; }
+.bench-cell {
+  padding: 7px 12px; font-family: var(--mono); font-size: 11px; color: var(--text1);
+}
+.bench-cell.hi { color: var(--text0); font-weight: 500; }
+.bench-cell.win { color: var(--green); }
+.bench-cell.mid { color: var(--amber); }
+.bench-cell.lose{ color: var(--red); }
+/* Run progress bar */
+.bench-run-bar { height: 3px; background: var(--bg3); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+.bench-run-fill { height: 100%; background: var(--amber); transition: width .2s ease; border-radius: 2px; }
+/* Latency mini-bars per run */
+.run-dots { display: flex; align-items: flex-end; gap: 2px; height: 24px; }
+.run-dot { width: 6px; border-radius: 1px; background: var(--teal); opacity: .7; min-height: 2px; }
+
+/* ── Empty state ─────────────────────────────────────────── */
+.empty { text-align: center; padding: 40px 20px; font-family: var(--mono); font-size: 11px; color: var(--text2); }
+.empty::before { content: '◌'; display: block; font-size: 24px; margin-bottom: 8px; opacity: .4; }
+
+/* ── Separator ───────────────────────────────────────────── */
+.sep { height: 1px; background: var(--line); margin: 16px 0; }
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ── Topbar ── -->
+<div id="topbar">
+  <div class="logo">OLLAMA<span>/</span>PLATFORM <span style="color:var(--text2);font-weight:400">v0.5</span></div>
+  <div id="status-bar">
+    <div class="status-pill"><div class="dot dot-gray" id="gw-dot"></div><span id="gw-status">disconnected</span></div>
+    <div class="status-pill" id="node-summary" style="display:none"></div>
+  </div>
+  <div id="key-input-wrap">
+    <label>API KEY</label>
+    <input id="api-key-field" type="password" placeholder="paste your key…" autocomplete="off">
+    <button class="btn btn-amber" id="connect-btn" onclick="connect()">CONNECT</button>
+    <button class="btn btn-ghost" id="refresh-btn" onclick="refreshAll()" style="display:none">↻ REFRESH</button>
+    <span id="last-refresh"></span>
+  </div>
+</div>
+
+<!-- ── Tabs ── -->
+<div id="tabs">
+  <div class="tab active" onclick="switchTab('overview')">OVERVIEW</div>
+  <div class="tab" onclick="switchTab('nodes')">NODES</div>
+  <div class="tab" onclick="switchTab('models')">MODELS</div>
+  <div class="tab" onclick="switchTab('metrics')">METRICS</div>
+  <div class="tab" onclick="switchTab('keys')">KEYS</div>
+  <div class="tab" onclick="switchTab('log')">REQUEST LOG</div>
+  <div class="tab" onclick="switchTab('playground')">PLAYGROUND</div>
+  <div class="tab" onclick="switchTab('bench')">BENCHMARK</div>
+</div>
+
+<!-- ── Content ── -->
+<div id="content">
+
+  <!-- OVERVIEW -->
+  <div id="panel-overview" class="panel active">
+    <div class="grid-4" id="kpi-grid">
+      <div class="card card-accent-amber"><div class="card-title">REQUESTS (24H)</div><div class="card-value" id="kpi-reqs">—</div><div class="card-sub" id="kpi-reqs-sub"></div></div>
+      <div class="card card-accent-red"><div class="card-title">ERROR RATE</div><div class="card-value" id="kpi-err">—</div><div class="card-sub" id="kpi-err-sub"></div></div>
+      <div class="card card-accent-teal"><div class="card-title">P95 LATENCY</div><div class="card-value" id="kpi-p95">—</div><div class="card-sub" id="kpi-p95-sub"></div></div>
+      <div class="card card-accent-green"><div class="card-title">TOKENS (24H)</div><div class="card-value" id="kpi-tokens">—</div><div class="card-sub" id="kpi-tokens-sub"></div></div>
+    </div>
+
+    <div class="section-title">NODES AT A GLANCE</div>
+    <div class="node-grid" id="ov-node-grid"></div>
+
+    <div class="grid-2" style="margin-top:12px">
+      <div>
+        <div class="section-title">REQUESTS BY MODEL</div>
+        <div class="card" id="model-bars"></div>
+      </div>
+      <div>
+        <div class="section-title">REQUESTS BY NODE</div>
+        <div class="card" id="node-bars"></div>
+      </div>
+    </div>
+
+    <div class="section-title">HOURLY THROUGHPUT (24H)</div>
+    <div class="card">
+      <div id="hourly-chart"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px">
+        <span style="font-family:var(--mono);font-size:9px;color:var(--text2)" id="hourly-oldest"></span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--text2)">now</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- NODES -->
+  <div id="panel-nodes" class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text2)">Worker node health &amp; model inventory</div>
+      <button class="btn btn-ghost btn-sm" onclick="forceHealthCheck()">↻ CHECK NOW</button>
+    </div>
+    <div class="node-grid" id="node-grid-full"></div>
+  </div>
+
+  <!-- MODELS -->
+  <div id="panel-models" class="panel">
+    <div class="section-title">PULL A MODEL</div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Model name</label>
+          <input class="inp" id="pull-model" placeholder="llama3.2, mistral:7b …" style="min-width:220px">
+        </div>
+        <div class="form-group">
+          <label>Node (blank = all)</label>
+          <select class="inp inp-sm" id="pull-node" style="min-width:140px">
+            <option value="">All nodes</option>
+          </select>
+        </div>
+        <button class="btn btn-amber" onclick="pullModel()" style="align-self:flex-end">PULL</button>
+        <button class="btn btn-ghost" onclick="syncManifest()" style="align-self:flex-end">⇄ SYNC MANIFEST</button>
+      </div>
+    </div>
+
+    <div class="section-title">ACTIVE &amp; RECENT JOBS</div>
+    <div class="card" id="jobs-list" style="padding:0;overflow:hidden"></div>
+
+    <div class="section-title">MODEL INVENTORY</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Model</th><th>Available on</th></tr></thead>
+        <tbody id="model-inventory"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- METRICS -->
+  <div id="panel-metrics" class="panel">
+    <div class="form-row" style="margin-bottom:16px">
+      <div class="form-group">
+        <label>Time window</label>
+        <select class="inp inp-sm" id="metrics-window" onchange="loadMetrics()">
+          <option value="1h">Last 1h</option>
+          <option value="6h">Last 6h</option>
+          <option value="24h" selected>Last 24h</option>
+          <option value="7d">Last 7d</option>
+          <option value="30d">Last 30d</option>
+          <option value="all">All time</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="grid-4" style="margin-bottom:12px">
+      <div class="card"><div class="card-title">AVG LATENCY</div><div class="card-value" style="color:var(--teal)" id="m-avg">—</div></div>
+      <div class="card"><div class="card-title">P50 LATENCY</div><div class="card-value" style="color:var(--blue)" id="m-p50">—</div></div>
+      <div class="card"><div class="card-title">P95 LATENCY</div><div class="card-value" style="color:var(--amber)" id="m-p95">—</div></div>
+      <div class="card"><div class="card-title">P99 LATENCY</div><div class="card-value" style="color:var(--red)" id="m-p99">—</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div>
+        <div class="section-title">BY MODEL</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Model</th><th>Requests</th><th>Errors</th><th>Avg ms</th><th>Tokens</th></tr></thead>
+            <tbody id="m-model-table"></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="section-title">BY NODE</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Node</th><th>Requests</th><th>Errors</th><th>Avg ms</th><th>P95 ms</th></tr></thead>
+            <tbody id="m-node-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:16px">BY API KEY</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Key hint</th><th>Requests</th><th>Errors</th><th>Avg ms</th><th>Tokens</th></tr></thead>
+        <tbody id="m-key-table"></tbody>
+      </table>
+    </div>
+
+    <div class="section-title" style="margin-top:16px">TOKEN THROUGHPUT BY HOUR</div>
+    <div class="card">
+      <div id="hourly-chart-metrics" style="display:flex;align-items:flex-end;gap:3px;height:60px;padding:4px 0"></div>
+    </div>
+  </div>
+
+  <!-- KEYS -->
+  <div id="panel-keys" class="panel">
+    <div class="section-title">CREATE KEY</div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Name</label>
+          <input class="inp" id="new-key-name" placeholder="prod-app, laptop-dev …">
+        </div>
+        <div class="form-group">
+          <label>Rate limit (rpm)</label>
+          <input class="inp inp-sm" id="new-key-rpm" type="number" placeholder="0 = unlimited" value="0">
+        </div>
+        <button class="btn btn-green" onclick="createKey()" style="align-self:flex-end">+ CREATE</button>
+      </div>
+      <div id="new-key-result" style="display:none;margin-top:12px;padding:10px;background:var(--bg3);border-radius:var(--radius);border:1px solid var(--green2)">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--green);letter-spacing:.08em;margin-bottom:6px">KEY CREATED — COPY NOW, IT WON'T BE SHOWN AGAIN</div>
+        <div id="new-key-value" style="font-family:var(--mono);font-size:12px;color:var(--text0);word-break:break-all"></div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="copyNewKey()">⎘ COPY</button>
+      </div>
+    </div>
+
+    <div class="section-title">ACTIVE KEYS</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Hint</th><th>Status</th><th>Rate limit</th><th>Requests</th><th>Last used</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody id="keys-table"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- REQUEST LOG -->
+  <div id="panel-log" class="panel">
+    <div class="form-row" style="margin-bottom:16px">
+      <div class="form-group">
+        <label>Window</label>
+        <select class="inp inp-sm" id="log-window">
+          <option value="1h" selected>1h</option>
+          <option value="6h">6h</option>
+          <option value="24h">24h</option>
+          <option value="7d">7d</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Model</label>
+        <input class="inp inp-sm" id="log-model" placeholder="any">
+      </div>
+      <div class="form-group">
+        <label>Node</label>
+        <input class="inp inp-sm" id="log-node" placeholder="any">
+      </div>
+      <div class="form-group" style="justify-content:flex-end">
+        <label>&nbsp;</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--mono);font-size:9px;color:var(--text1)">
+          <input type="checkbox" id="log-errors-only"> ERRORS ONLY
+        </label>
+      </div>
+      <button class="btn btn-amber" onclick="loadLog()" style="align-self:flex-end">SEARCH</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Timestamp</th><th>Model</th><th>Node</th><th>Status</th><th>Latency</th><th>Tokens</th><th>Stream</th><th>Key hint</th></tr></thead>
+        <tbody id="log-table"></tbody>
+      </table>
+    </div>
+    <div id="log-pagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--text2)">
+      <span id="log-count"></span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" id="log-prev" onclick="logPage(-1)">← PREV</button>
+        <button class="btn btn-ghost btn-sm" id="log-next" onclick="logPage(1)">NEXT →</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- PLAYGROUND -->
+  <div id="panel-playground" class="panel">
+    <div class="pg-layout">
+
+      <!-- Sidebar: config -->
+      <div class="pg-sidebar">
+
+        <div class="card">
+          <div class="card-title">MODEL</div>
+          <select class="inp" id="pg-model" style="width:100%;margin-top:2px">
+            <option value="">— select model —</option>
+          </select>
+        </div>
+
+        <div class="card">
+          <div class="card-title">SYSTEM PROMPT</div>
+          <textarea class="inp" id="pg-system" rows="3" style="width:100%;margin-top:4px" placeholder="You are a helpful assistant."></textarea>
+        </div>
+
+        <div class="card">
+          <div class="card-title">PARAMETERS</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
+            <div class="form-group">
+              <label>Temperature</label>
+              <input class="inp" id="pg-temp" type="number" step="0.1" min="0" max="2" value="0.7">
+            </div>
+            <div class="form-group">
+              <label>Max tokens</label>
+              <input class="inp" id="pg-maxtok" type="number" min="1" max="8192" value="512">
+            </div>
+            <div class="form-group">
+              <label>Top-p</label>
+              <input class="inp" id="pg-topp" type="number" step="0.05" min="0" max="1" value="1">
+            </div>
+            <div class="form-group">
+              <label>Seed</label>
+              <input class="inp" id="pg-seed" type="number" placeholder="random">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:8px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input type="checkbox" id="pg-stream" checked> STREAM TOKENS
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">CHAT HISTORY</div>
+          <div id="pg-history" style="font-family:var(--mono);font-size:9px;color:var(--text2);margin:6px 0">No messages yet</div>
+          <button class="btn btn-ghost btn-sm" onclick="clearPlayground()" style="margin-top:4px">✕ CLEAR</button>
+        </div>
+
+      </div>
+
+      <!-- Main: prompt + output -->
+      <div class="pg-main">
+
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <div class="form-group" style="flex:1">
+            <label>USER MESSAGE</label>
+            <textarea class="inp" id="pg-prompt" rows="3" style="width:100%;margin-top:4px" placeholder="Type your message…"></textarea>
+          </div>
+          <button class="btn btn-amber" id="pg-send-btn" onclick="pgSend()" style="align-self:flex-end;padding:8px 20px">SEND ▶</button>
+        </div>
+
+        <div class="pg-stats" id="pg-stats" style="display:none">
+          <div class="pg-stat"><div class="pg-stat-label">TIME TO FIRST TOKEN</div><div class="pg-stat-value hi-amber" id="pg-ttft">—</div></div>
+          <div class="pg-stat"><div class="pg-stat-label">TOTAL LATENCY</div><div class="pg-stat-value hi-teal" id="pg-latency">—</div></div>
+          <div class="pg-stat"><div class="pg-stat-label">TOKENS/SEC</div><div class="pg-stat-value hi-green" id="pg-tps">—</div></div>
+          <div class="pg-stat"><div class="pg-stat-label">PROMPT TOKENS</div><div class="pg-stat-value" id="pg-ptok">—</div></div>
+          <div class="pg-stat"><div class="pg-stat-label">COMPLETION TOKENS</div><div class="pg-stat-value" id="pg-ctok">—</div></div>
+          <div class="pg-stat"><div class="pg-stat-label">NODE</div><div class="pg-stat-value hi-blue" id="pg-node">—</div></div>
+        </div>
+
+        <div class="pg-output" id="pg-output"><span style="color:var(--text2)">Output will appear here…</span></div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- BENCHMARK -->
+  <div id="panel-bench" class="panel">
+    <div class="grid-2" style="margin-bottom:14px;align-items:start">
+
+      <!-- Config card -->
+      <div class="card">
+        <div class="card-title">BENCHMARK CONFIG</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          <div class="form-group" style="grid-column:span 2">
+            <label>Prompt</label>
+            <textarea class="inp" id="bench-prompt" rows="3" style="width:100%">Explain the concept of neural networks in exactly 3 sentences.</textarea>
+          </div>
+          <div class="form-group" style="grid-column:span 2">
+            <label>Models to compare (one per line)</label>
+            <textarea class="inp" id="bench-models" rows="3" style="width:100%" placeholder="llama3.2&#10;mistral&#10;codellama"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Runs per model</label>
+            <input class="inp" id="bench-runs" type="number" min="1" max="20" value="3">
+          </div>
+          <div class="form-group">
+            <label>Max tokens</label>
+            <input class="inp" id="bench-maxtok" type="number" min="1" max="2048" value="256">
+          </div>
+          <div class="form-group">
+            <label>Concurrency</label>
+            <input class="inp" id="bench-concurrency" type="number" min="1" max="10" value="1">
+          </div>
+          <div class="form-group">
+            <label>Temperature</label>
+            <input class="inp" id="bench-temp" type="number" step="0.1" min="0" max="2" value="0.0">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+          <button class="btn btn-amber" id="bench-run-btn" onclick="runBenchmark()">▶ RUN BENCHMARK</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearBench()">✕ CLEAR</button>
+          <span id="bench-status" style="font-family:var(--mono);font-size:10px;color:var(--text2)"></span>
+        </div>
+        <div class="bench-run-bar"><div class="bench-run-fill" id="bench-progress" style="width:0%"></div></div>
+      </div>
+
+      <!-- Live run log -->
+      <div class="card" style="max-height:320px;overflow-y:auto">
+        <div class="card-title">RUN LOG</div>
+        <div id="bench-log" style="font-family:var(--mono);font-size:10px;color:var(--text1);margin-top:6px;line-height:1.8">
+          <span style="color:var(--text2)">No runs yet…</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results table -->
+    <div class="section-title">RESULTS</div>
+    <div id="bench-results-wrap">
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Runs</th>
+              <th>Avg latency</th>
+              <th>P95 latency</th>
+              <th>Avg tok/s</th>
+              <th>Avg tokens</th>
+              <th>Errors</th>
+              <th>Latency dist.</th>
+            </tr>
+          </thead>
+          <tbody id="bench-results-body">
+            <tr><td colspan="8" class="dim">Run a benchmark to see results</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Per-run detail -->
+    <div id="bench-detail-section" style="display:none">
+      <div class="section-title" style="margin-top:16px">PER-RUN DETAIL — <span id="bench-detail-model" style="color:var(--amber)"></span></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Latency</th><th>TTFT</th><th>Tok/s</th><th>Tokens</th><th>Status</th></tr></thead>
+          <tbody id="bench-detail-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+</div><!-- /app -->
+
+<div id="toast"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────
+let API_KEY = '';
+let BASE    = '';   // auto-detect from window.location
+let _jobPollerTimer = null;
+let _logOffset = 0;
+const LOG_LIMIT = 50;
+let _newKeyValue = '';
+
+// ── Boot ──────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  BASE = window.location.origin;
+  const stored = sessionStorage.getItem('ollama_api_key');
+  if (stored) {
+    document.getElementById('api-key-field').value = stored;
+    connect();
+  }
+});
+
+// ── Tab switching ─────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const names = ['overview','nodes','models','metrics','keys','log','playground','bench'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'metrics') loadMetrics();
+  if (name === 'log')     { _logOffset = 0; loadLog(); }
+  if (name === 'keys')    loadKeys();
+  if (name === 'models')  loadJobs();
+  if (name === 'playground') initPlayground();
+  if (name === 'bench')      initBench();
+}
+
+// ── API helper ────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(BASE + path, {
+    ...opts,
+    headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json', ...(opts.headers||{}) }
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({detail: res.statusText}));
+    throw new Error(err.detail || res.statusText);
+  }
+  return res.json();
+}
+
+// ── Connect ───────────────────────────────────────────────
+async function connect() {
+  const key = document.getElementById('api-key-field').value.trim();
+  if (!key) return toast('Enter an API key first', 'err');
+  API_KEY = key;
+  sessionStorage.setItem('ollama_api_key', key);
+  try {
+    await refreshAll();
+    document.getElementById('gw-dot').className = 'dot dot-green';
+    document.getElementById('gw-status').textContent = 'connected';
+    document.getElementById('refresh-btn').style.display = '';
+    toast('Connected', 'ok');
+    _jobPollerTimer && clearInterval(_jobPollerTimer);
+    _jobPollerTimer = setInterval(loadJobs, 8000);
+  } catch(e) {
+    document.getElementById('gw-dot').className = 'dot dot-red';
+    document.getElementById('gw-status').textContent = 'auth error';
+    toast('Connection failed: ' + e.message, 'err');
+  }
+}
+
+async function refreshAll() {
+  await Promise.all([
+    loadOverview(),
+    loadNodes(),
+    loadModelsPanel(),
+  ]);
+  document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+}
+
+// ── Overview ──────────────────────────────────────────────
+async function loadOverview() {
+  const [health, metrics, nodes] = await Promise.all([
+    fetch(BASE + '/api/health').then(r => r.json()),
+    api('/api/metrics?window=24h'),
+    api('/api/nodes'),
+  ]);
+
+  // KPIs
+  const ov = metrics.overview;
+  setText('kpi-reqs', fmt(ov.total_requests));
+  setText('kpi-reqs-sub', `${ov.streaming_ratio_pct}% streaming`);
+  const errPct = ov.error_rate_pct;
+  setText('kpi-err', errPct.toFixed(1) + '%');
+  document.getElementById('kpi-err').style.color = errPct > 5 ? 'var(--red)' : errPct > 1 ? 'var(--amber)' : 'var(--green)';
+  setText('kpi-err-sub', ov.error_count + ' errors');
+  setText('kpi-p95', ov.latency_ms.p95 != null ? ov.latency_ms.p95 + 'ms' : '—');
+  setText('kpi-p95-sub', 'p50: ' + (ov.latency_ms.p50 ?? '—') + 'ms');
+  setText('kpi-tokens', fmtK(ov.tokens.total));
+  setText('kpi-tokens-sub', (ov.tokens.per_second ?? '—') + ' tok/s');
+
+  // Node summary pill
+  const ns = document.getElementById('node-summary');
+  ns.style.display = '';
+  ns.innerHTML = `<div class="dot ${health.nodes.healthy > 0 ? 'dot-green' : 'dot-red'}"></div>
+    <span>${health.nodes.healthy ?? 0}/${health.nodes.total ?? 0} nodes healthy</span>`;
+
+  // Node cards
+  renderNodeCards('ov-node-grid', nodes.nodes);
+
+  // Model bars
+  renderBars('model-bars', metrics.by_model, 'model', 'requests', 'bar-fill-amber');
+  renderBars('node-bars',  metrics.by_node,  'node_id', 'requests', 'bar-fill-teal');
+
+  // Hourly chart
+  renderHourlyChart('hourly-chart', metrics.by_hour);
+}
+
+// ── Nodes ─────────────────────────────────────────────────
+async function loadNodes() {
+  const data = await api('/api/nodes');
+  renderNodeCards('node-grid-full', data.nodes);
+}
+
+function renderNodeCards(containerId, nodes) {
+  const el = document.getElementById(containerId);
+  if (!nodes || !nodes.length) { el.innerHTML = '<div class="empty">No nodes registered</div>'; return; }
+  el.innerHTML = nodes.map(n => {
+    const statusClass = n.status;
+    const badge = statusBadge(n.status);
+    const models = (n.available_models || []).map(m =>
+      `<span class="chip">${m}</span>`).join('');
+    const lastSeen = n.last_seen ? timeSince(n.last_seen) : 'never';
+    return `<div class="node-card ${statusClass}">
+      <div class="node-header">
+        <div>
+          <div class="node-id">${n.id}</div>
+          <div class="node-meta">${n.host}:${n.port} · ${n.os}${n.ollama_version ? ' · v'+n.ollama_version : ''}</div>
+        </div>
+        ${badge}
+      </div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text2)">Last seen: ${lastSeen}</div>
+      ${n.tags && n.tags.length ? `<div style="margin-top:6px">${n.tags.map(t=>`<span class="chip">${t}</span>`).join('')}</div>` : ''}
+      <div class="model-chips">${models || '<span style="font-family:var(--mono);font-size:9px;color:var(--text2)">No models pulled</span>'}</div>
+    </div>`;
+  }).join('');
+}
+
+async function forceHealthCheck() {
+  try {
+    await api('/api/nodes/check', { method: 'POST' });
+    toast('Health check triggered', 'ok');
+    setTimeout(() => { loadNodes(); loadOverview(); }, 2000);
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── Models ────────────────────────────────────────────────
+async function loadModelsPanel() {
+  const [models, nodes] = await Promise.all([
+    api('/api/models'),
+    api('/api/nodes'),
+  ]);
+
+  // Model inventory table
+  const tbody = document.getElementById('model-inventory');
+  if (!models.models.length) {
+    tbody.innerHTML = `<tr><td colspan="2" class="dim">No models found</td></tr>`;
+  } else {
+    tbody.innerHTML = models.models.map(m =>
+      `<tr><td class="hi">${m.name}</td><td>${m.available_on.map(n=>`<span class="chip">${n}</span>`).join('')}</td></tr>`
+    ).join('');
+  }
+
+  // Populate node select for pull
+  const sel = document.getElementById('pull-node');
+  sel.innerHTML = '<option value="">All nodes</option>' +
+    nodes.nodes.map(n => `<option value="${n.id}">${n.id} (${n.os})</option>`).join('');
+
+  await loadJobs();
+}
+
+async function loadJobs() {
+  try {
+    const data = await api('/api/models/jobs');
+    const el = document.getElementById('jobs-list');
+    const jobs = data.jobs;
+    if (!jobs.length) {
+      el.innerHTML = '<div class="empty">No pull jobs yet</div>';
+      return;
+    }
+    el.innerHTML = jobs.map(j => {
+      const pct = j.progress_pct || 0;
+      const fillClass = j.status === 'done' ? 'done' : j.status === 'error' ? 'error' : '';
+      const badge = j.status === 'done' ? '<span class="badge badge-green">DONE</span>'
+                  : j.status === 'error' ? '<span class="badge badge-red">ERROR</span>'
+                  : j.status === 'pulling' ? '<span class="badge badge-amber">PULLING</span>'
+                  : '<span class="badge badge-gray">QUEUED</span>';
+      return `<div class="job-row">
+        <div class="job-info" style="flex:1;min-width:0">
+          <div class="job-model">${j.model} <span style="color:var(--text2)">→ ${j.node_id}</span></div>
+          <div class="job-detail">${j.current_layer || (j.error ? '⚠ '+j.error : '')} ${j.bytes_total ? '· '+fmtBytes(j.bytes_done)+'/'+fmtBytes(j.bytes_total) : ''}</div>
+          <div class="progress-track"><div class="progress-fill ${fillClass}" style="width:${pct}%"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          ${badge}
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">${pct.toFixed(0)}%</span>
+          ${(j.status==='done'||j.status==='error') ? `<button class="btn btn-ghost btn-sm" onclick="deleteJob('${j.job_id}')">✕</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { /* silent if not on models tab */ }
+}
+
+async function pullModel() {
+  const model = document.getElementById('pull-model').value.trim();
+  if (!model) return toast('Enter a model name', 'err');
+  const nodeId = document.getElementById('pull-node').value;
+  try {
+    const body = { model };
+    if (nodeId) body.node_ids = [nodeId];
+    const data = await api('/api/models/pull', { method: 'POST', body: JSON.stringify(body) });
+    toast(`Pull queued: ${data.jobs.length} job(s)`, 'ok');
+    document.getElementById('pull-model').value = '';
+    loadJobs();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function syncManifest() {
+  try {
+    const data = await api('/api/models/sync', { method: 'POST' });
+    toast(data.message, 'ok');
+    loadJobs();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function deleteJob(jobId) {
+  try {
+    await api('/api/models/jobs/' + jobId, { method: 'DELETE' });
+    loadJobs();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── Metrics ───────────────────────────────────────────────
+async function loadMetrics() {
+  const w = document.getElementById('metrics-window').value;
+  try {
+    const data = await api(`/api/metrics?window=${w}`);
+    const ov = data.overview;
+
+    const lat = ov.latency_ms;
+    setText('m-avg', lat.avg != null ? lat.avg + 'ms' : '—');
+    setText('m-p50', lat.p50 != null ? lat.p50 + 'ms' : '—');
+    setText('m-p95', lat.p95 != null ? lat.p95 + 'ms' : '—');
+    setText('m-p99', lat.p99 != null ? lat.p99 + 'ms' : '—');
+
+    // Model table
+    document.getElementById('m-model-table').innerHTML =
+      data.by_model.map(r => `<tr>
+        <td class="hi">${r.model}</td>
+        <td>${r.requests}</td>
+        <td style="color:${r.errors > 0 ? 'var(--red)' : 'var(--text2)'}">${r.errors}</td>
+        <td>${r.avg_latency_ms ?? '—'}</td>
+        <td>${fmtK(r.total_tokens)}</td>
+      </tr>`).join('') || `<tr><td colspan="5" class="dim">No data</td></tr>`;
+
+    // Node table
+    document.getElementById('m-node-table').innerHTML =
+      data.by_node.map(r => `<tr>
+        <td class="hi">${r.node_id}</td>
+        <td>${r.requests}</td>
+        <td style="color:${r.errors > 0 ? 'var(--red)' : 'var(--text2)'}">${r.errors}</td>
+        <td>${r.avg_latency_ms ?? '—'}</td>
+        <td style="color:var(--amber)">${r.p95_latency_ms ?? '—'}</td>
+      </tr>`).join('') || `<tr><td colspan="5" class="dim">No data</td></tr>`;
+
+    // Key table
+    document.getElementById('m-key-table').innerHTML =
+      data.by_key.map(r => `<tr>
+        <td class="hi mono">${r.key_hint}…</td>
+        <td>${r.requests}</td>
+        <td style="color:${r.errors > 0 ? 'var(--red)' : 'var(--text2)'}">${r.errors}</td>
+        <td>${r.avg_latency_ms ?? '—'}</td>
+        <td>${fmtK(r.total_tokens)}</td>
+      </tr>`).join('') || `<tr><td colspan="5" class="dim">No data</td></tr>`;
+
+    renderHourlyChart('hourly-chart-metrics', data.by_hour);
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── Keys ──────────────────────────────────────────────────
+async function loadKeys() {
+  const data = await api('/api/auth/keys');
+  const tbody = document.getElementById('keys-table');
+  if (!data.keys.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="dim">No keys</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.keys.map(k => {
+    const enabledBadge = k.enabled
+      ? '<span class="badge badge-green">ACTIVE</span>'
+      : '<span class="badge badge-red">REVOKED</span>';
+    const rpm = k.rate_limit_rpm > 0 ? k.rate_limit_rpm + ' rpm' : '∞';
+    const lastUsed = k.last_used ? timeSince(k.last_used) : 'never';
+    const created  = k.created_at ? new Date(k.created_at).toLocaleDateString() : '—';
+    return `<tr>
+      <td class="hi">${k.name}</td>
+      <td class="mono dim">${k.key_hint}…</td>
+      <td>${enabledBadge}</td>
+      <td class="dim">${rpm}</td>
+      <td>${k.request_count ?? 0}</td>
+      <td class="dim">${lastUsed}</td>
+      <td class="dim">${created}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          ${k.enabled
+            ? `<button class="btn btn-amber btn-sm" onclick="revokeKey('${k.name}')">REVOKE</button>`
+            : `<button class="btn btn-green btn-sm" onclick="enableKey('${k.name}')">ENABLE</button>`}
+          <button class="btn btn-red btn-sm" onclick="deleteKey('${k.name}')">DEL</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function createKey() {
+  const name = document.getElementById('new-key-name').value.trim();
+  const rpm  = parseInt(document.getElementById('new-key-rpm').value) || 0;
+  if (!name) return toast('Enter a key name', 'err');
+  try {
+    const data = await api('/api/auth/keys', {
+      method: 'POST', body: JSON.stringify({ name, rate_limit_rpm: rpm })
+    });
+    _newKeyValue = data.key;
+    document.getElementById('new-key-value').textContent = data.key;
+    document.getElementById('new-key-result').style.display = '';
+    document.getElementById('new-key-name').value = '';
+    toast('Key created — copy it now!', 'ok');
+    loadKeys();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+function copyNewKey() {
+  if (!_newKeyValue) return;
+  navigator.clipboard.writeText(_newKeyValue).then(() => toast('Copied!', 'ok'));
+}
+
+async function revokeKey(name) {
+  try {
+    await api('/api/auth/keys/' + name + '/revoke', { method: 'POST' });
+    toast('Key revoked: ' + name, 'ok');
+    loadKeys();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function enableKey(name) {
+  try {
+    await api('/api/auth/keys/' + name + '/enable', { method: 'POST' });
+    toast('Key enabled: ' + name, 'ok');
+    loadKeys();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function deleteKey(name) {
+  if (!confirm('Permanently delete key "' + name + '"?')) return;
+  try {
+    await api('/api/auth/keys/' + name, { method: 'DELETE' });
+    toast('Key deleted: ' + name, 'ok');
+    loadKeys();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── Request Log ───────────────────────────────────────────
+async function loadLog() {
+  try {
+    const w       = document.getElementById('log-window').value;
+    const model   = document.getElementById('log-model').value.trim();
+    const nodeId  = document.getElementById('log-node').value.trim();
+    const errOnly = document.getElementById('log-errors-only').checked;
+    let url = `/api/metrics/requests?window=${w}&limit=${LOG_LIMIT}&offset=${_logOffset}`;
+    if (model)  url += '&model=' + encodeURIComponent(model);
+    if (nodeId) url += '&node_id=' + encodeURIComponent(nodeId);
+    if (errOnly) url += '&errors_only=true';
+
+    const data = await api(url);
+    const tbody = document.getElementById('log-table');
+
+    if (!data.rows.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="dim">No requests found</td></tr>`;
+    } else {
+      tbody.innerHTML = data.rows.map(r => {
+        const sc = r.status_code;
+        const scColor = sc >= 500 ? 'var(--red)' : sc >= 400 ? 'var(--amber)' : 'var(--green)';
+        return `<tr>
+          <td class="dim">${r.ts ? r.ts.replace('T',' ').split('.')[0] : '—'}</td>
+          <td class="hi">${r.model || '—'}</td>
+          <td class="dim">${r.node_id || '—'}</td>
+          <td><span style="font-family:var(--mono);color:${scColor}">${sc || '—'}</span></td>
+          <td class="dim">${r.latency_ms != null ? r.latency_ms.toFixed(0)+'ms' : '—'}</td>
+          <td class="dim">${r.total_tokens ?? '—'}</td>
+          <td class="dim">${r.streaming ? '↻' : '—'}</td>
+          <td class="dim mono">${r.api_key_hint ? r.api_key_hint+'…' : '—'}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    document.getElementById('log-count').textContent =
+      `${_logOffset + 1}–${Math.min(_logOffset + LOG_LIMIT, data.total)} of ${data.total}`;
+    document.getElementById('log-prev').disabled = _logOffset === 0;
+    document.getElementById('log-next').disabled = _logOffset + LOG_LIMIT >= data.total;
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+function logPage(dir) {
+  _logOffset = Math.max(0, _logOffset + dir * LOG_LIMIT);
+  loadLog();
+}
+
+// ── Chart helpers ─────────────────────────────────────────
+function renderHourlyChart(containerId, byHour) {
+  const el = document.getElementById(containerId);
+  if (!byHour || !byHour.length) { el.innerHTML = '<div class="empty" style="padding:8px">No hourly data</div>'; return; }
+  const maxReqs = Math.max(...byHour.map(h => h.requests), 1);
+  el.innerHTML = byHour.map(h => {
+    const pct = Math.max((h.requests / maxReqs) * 100, 2);
+    const tip = `${h.hour?.slice(11,16) || h.hour}: ${h.requests} req, ${fmtK(h.total_tokens)} tok`;
+    const errRatio = h.errors / (h.requests || 1);
+    const color = errRatio > 0.1 ? 'var(--red)' : errRatio > 0 ? 'var(--amber)' : 'var(--teal)';
+    return `<div class="hour-bar" data-tip="${tip}" style="height:${pct}%;background:${color};opacity:.75"></div>`;
+  }).join('');
+  const oldest = byHour[0]?.hour;
+  if (oldest && document.getElementById('hourly-oldest'))
+    document.getElementById('hourly-oldest').textContent = oldest.slice(0,16).replace('T',' ');
+}
+
+function renderBars(containerId, rows, labelKey, valueKey, fillClass) {
+  const el = document.getElementById(containerId);
+  if (!rows || !rows.length) { el.innerHTML = '<div class="empty" style="padding:8px">No data</div>'; return; }
+  const max = Math.max(...rows.map(r => r[valueKey]), 1);
+  el.innerHTML = rows.slice(0, 8).map(r => {
+    const pct = (r[valueKey] / max) * 100;
+    return `<div class="bar-row">
+      <div class="bar-label" title="${r[labelKey]}">${r[labelKey]}</div>
+      <div class="bar-track"><div class="bar-fill ${fillClass}" style="width:${pct}%"></div></div>
+      <div class="bar-val">${r[valueKey]}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Utility ───────────────────────────────────────────────
+function statusBadge(s) {
+  const map = { healthy:'badge-green', degraded:'badge-amber', offline:'badge-red', unknown:'badge-gray' };
+  return `<span class="badge ${map[s] || 'badge-gray'}">${(s||'').toUpperCase()}</span>`;
+}
+
+function timeSince(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60)  return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+
+function fmt(n) {
+  if (n == null) return '—';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return String(n);
+}
+function fmtK(n) {
+  if (n == null || n === 0) return '0';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return String(n);
+}
+function fmtBytes(b) {
+  if (!b) return '0B';
+  if (b >= 1e9) return (b/1e9).toFixed(1) + 'GB';
+  if (b >= 1e6) return (b/1e6).toFixed(1) + 'MB';
+  if (b >= 1e3) return (b/1e3).toFixed(1) + 'KB';
+  return b + 'B';
+}
+function setText(id, v) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = v ?? '—';
+}
+
+let _toastTimer = null;
+function toast(msg, type = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show toast-' + type;
+  _toastTimer && clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+}
+
+// ═══════════════════════════════════════════════════════════
+// PLAYGROUND
+// ═══════════════════════════════════════════════════════════
+let _pgHistory = [];        // [{role,content}]
+let _pgStreaming = false;
+
+async function initPlayground() {
+  // Populate model selector
+  try {
+    const data = await api('/v1/models');
+    const sel = document.getElementById('pg-model');
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">— select model —</option>' +
+      data.data.map(m => `<option value="${m.id}"${m.id===prev?' selected':''}>${m.id}</option>`).join('');
+  } catch(e) { /* silent */ }
+}
+
+function clearPlayground() {
+  _pgHistory = [];
+  document.getElementById('pg-output').innerHTML = '<span style="color:var(--text2)">Output will appear here…</span>';
+  document.getElementById('pg-history').textContent = 'No messages yet';
+  document.getElementById('pg-stats').style.display = 'none';
+}
+
+async function pgSend() {
+  if (_pgStreaming) return;
+  const model  = document.getElementById('pg-model').value;
+  const prompt = document.getElementById('pg-prompt').value.trim();
+  const system = document.getElementById('pg-system').value.trim();
+  const temp   = parseFloat(document.getElementById('pg-temp').value) || 0.7;
+  const maxTok = parseInt(document.getElementById('pg-maxtok').value) || 512;
+  const topP   = parseFloat(document.getElementById('pg-topp').value) || 1;
+  const seedEl = document.getElementById('pg-seed').value;
+  const stream = document.getElementById('pg-stream').checked;
+
+  if (!model)  return toast('Select a model first', 'err');
+  if (!prompt) return toast('Enter a message', 'err');
+
+  // Build messages array
+  const messages = [];
+  if (system) messages.push({ role: 'system', content: system });
+  messages.push(..._pgHistory);
+  messages.push({ role: 'user', content: prompt });
+
+  const body = { model, messages, stream, temperature: temp, max_tokens: maxTok, top_p: topP };
+  if (seedEl) body.seed = parseInt(seedEl);
+
+  document.getElementById('pg-prompt').value = '';
+  _pgStreaming = true;
+  document.getElementById('pg-send-btn').textContent = '⏹ STOP';
+  document.getElementById('pg-send-btn').onclick = () => { _pgStreaming = false; };
+
+  const outputEl = document.getElementById('pg-output');
+  outputEl.innerHTML = '<span class="cursor"></span>';
+
+  let fullText = '';
+  const t0 = performance.now();
+  let ttft = null;
+  let tokenCount = 0;
+
+  document.getElementById('pg-stats').style.display = 'none';
+
+  try {
+    const res = await fetch(BASE + '/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({detail:res.statusText})); throw new Error(e.detail); }
+
+    if (stream) {
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+
+      while (_pgStreaming) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('
+');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+          try {
+            const chunk = JSON.parse(line.slice(6));
+            const delta = chunk.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              if (ttft === null) ttft = performance.now() - t0;
+              fullText += delta;
+              tokenCount++;
+              outputEl.innerHTML = escHtml(fullText) + '<span class="cursor"></span>';
+              outputEl.scrollTop = outputEl.scrollHeight;
+            }
+          } catch(e) {}
+        }
+      }
+      outputEl.innerHTML = escHtml(fullText);
+    } else {
+      const data = await res.json();
+      ttft = performance.now() - t0;
+      fullText = data.choices?.[0]?.message?.content || '';
+      tokenCount = data.usage?.completion_tokens || 0;
+      const promptTokens = data.usage?.prompt_tokens || 0;
+      outputEl.textContent = fullText;
+      setText('pg-ptok', promptTokens);
+    }
+
+    const totalMs = performance.now() - t0;
+    const tps = tokenCount > 0 ? (tokenCount / (totalMs / 1000)).toFixed(1) : '—';
+
+    // Update stats bar
+    setText('pg-ttft',    ttft != null ? ttft.toFixed(0) + 'ms' : '—');
+    setText('pg-latency', totalMs.toFixed(0) + 'ms');
+    setText('pg-tps',     tps + ' t/s');
+    setText('pg-ctok',    tokenCount);
+    document.getElementById('pg-stats').style.display = 'flex';
+
+    // Update history
+    _pgHistory.push({ role: 'user', content: prompt });
+    _pgHistory.push({ role: 'assistant', content: fullText });
+    const histEl = document.getElementById('pg-history');
+    histEl.innerHTML = _pgHistory.map((m,i) =>
+      `<div style="color:${m.role==='user'?'var(--amber)':'var(--teal)'}; margin-bottom:2px">${m.role}: ${m.content.slice(0,60)}${m.content.length>60?'…':''}</div>`
+    ).join('');
+
+  } catch(e) {
+    outputEl.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(e.message)}</span>`;
+    toast(e.message, 'err');
+  } finally {
+    _pgStreaming = false;
+    document.getElementById('pg-send-btn').textContent = 'SEND ▶';
+    document.getElementById('pg-send-btn').onclick = pgSend;
+  }
+}
+
+// Enter key sends (Shift+Enter = newline)
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && document.activeElement.id === 'pg-prompt') {
+    e.preventDefault();
+    pgSend();
+  }
+});
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// BENCHMARK
+// ═══════════════════════════════════════════════════════════
+let _benchRunning = false;
+let _benchResults = {};       // model → { runs:[], errors:0 }
+let _benchAbort   = false;
+
+function initBench() {
+  // Pre-fill model list from inventory if empty
+  const el = document.getElementById('bench-models');
+  if (!el.value.trim()) {
+    api('/v1/models').then(d => {
+      el.value = d.data.slice(0, 4).map(m => m.id).join('
+');
+    }).catch(() => {});
+  }
+}
+
+function clearBench() {
+  _benchResults = {};
+  _benchAbort = false;
+  document.getElementById('bench-results-body').innerHTML =
+    '<tr><td colspan="8" class="dim">Run a benchmark to see results</td></tr>';
+  document.getElementById('bench-log').innerHTML = '<span style="color:var(--text2)">No runs yet…</span>';
+  document.getElementById('bench-detail-section').style.display = 'none';
+  document.getElementById('bench-progress').style.width = '0%';
+  document.getElementById('bench-status').textContent = '';
+}
+
+async function runBenchmark() {
+  if (_benchRunning) { _benchAbort = true; return; }
+
+  const prompt      = document.getElementById('bench-prompt').value.trim();
+  const modelsRaw   = document.getElementById('bench-models').value.trim();
+  const runsEach    = Math.max(1, parseInt(document.getElementById('bench-runs').value) || 3);
+  const maxTok      = parseInt(document.getElementById('bench-maxtok').value) || 256;
+  const concurrency = Math.max(1, parseInt(document.getElementById('bench-concurrency').value) || 1);
+  const temp        = parseFloat(document.getElementById('bench-temp').value) || 0;
+
+  if (!prompt)    return toast('Enter a prompt', 'err');
+  if (!modelsRaw) return toast('Enter at least one model', 'err');
+  const models = modelsRaw.split('
+').map(s => s.trim()).filter(Boolean);
+  if (!models.length) return toast('No valid models', 'err');
+
+  _benchRunning = true;
+  _benchAbort   = false;
+  _benchResults = {};
+  document.getElementById('bench-run-btn').textContent = '⏹ STOP';
+  document.getElementById('bench-log').innerHTML = '';
+
+  const totalRuns = models.length * runsEach;
+  let completedRuns = 0;
+
+  function benchLog(msg, color = 'var(--text1)') {
+    const el = document.getElementById('bench-log');
+    el.innerHTML += `<div style="color:${color}">${escHtml(msg)}</div>`;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function updateProgress() {
+    const pct = (completedRuns / totalRuns) * 100;
+    document.getElementById('bench-progress').style.width = pct + '%';
+    document.getElementById('bench-status').textContent =
+      `${completedRuns}/${totalRuns} runs`;
+  }
+
+  // Run one single inference and return timing data
+  async function singleRun(model, runIdx) {
+    const body = {
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      stream: true,
+      temperature: temp,
+      max_tokens: maxTok,
+    };
+
+    const t0 = performance.now();
+    let ttft = null;
+    let tokenCount = 0;
+    let errorMsg = null;
+
+    try {
+      const res = await fetch(BASE + '/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(120000),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(e.detail || res.statusText);
+      }
+
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('
+');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+          try {
+            const chunk = JSON.parse(line.slice(6));
+            const delta = chunk.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              if (ttft === null) ttft = performance.now() - t0;
+              tokenCount++;
+            }
+          } catch(e) {}
+        }
+      }
+    } catch(e) {
+      errorMsg = e.message;
+    }
+
+    const totalMs = performance.now() - t0;
+    return {
+      latencyMs: Math.round(totalMs),
+      ttftMs:    ttft != null ? Math.round(ttft) : null,
+      tokensPerSec: tokenCount > 0 ? parseFloat((tokenCount / (totalMs / 1000)).toFixed(1)) : 0,
+      tokenCount,
+      error: errorMsg,
+    };
+  }
+
+  // Run benchmark model by model
+  for (const model of models) {
+    if (_benchAbort) break;
+    _benchResults[model] = { runs: [], errors: 0 };
+    benchLog(`▶ ${model} — ${runsEach} run(s), concurrency=${concurrency}`, 'var(--amber)');
+
+    // Chunk runs by concurrency
+    for (let i = 0; i < runsEach; i += concurrency) {
+      if (_benchAbort) break;
+      const batch = [];
+      for (let j = 0; j < concurrency && i + j < runsEach; j++) {
+        batch.push(singleRun(model, i + j));
+      }
+      const results = await Promise.all(batch);
+      for (const r of results) {
+        _benchResults[model].runs.push(r);
+        if (r.error) _benchResults[model].errors++;
+        completedRuns++;
+        const color = r.error ? 'var(--red)' : r.latencyMs < 2000 ? 'var(--green)' : 'var(--text1)';
+        const label = r.error
+          ? `  run ${completedRuns}: ERROR — ${r.error.slice(0, 60)}`
+          : `  run ${_benchResults[model].runs.length}: ${r.latencyMs}ms · ${r.tokensPerSec} t/s · ${r.tokenCount} tok`;
+        benchLog(label, color);
+        updateProgress();
+        renderBenchResults();
+      }
+    }
+    benchLog(`✓ ${model} done`, 'var(--teal)');
+  }
+
+  benchLog(_benchAbort ? '⏹ Stopped.' : '✓ Benchmark complete.', 'var(--green)');
+  _benchRunning = false;
+  _benchAbort   = false;
+  document.getElementById('bench-run-btn').textContent = '▶ RUN BENCHMARK';
+  document.getElementById('bench-progress').style.width = '100%';
+}
+
+function renderBenchResults() {
+  const tbody = document.getElementById('bench-results-body');
+  const models = Object.keys(_benchResults);
+  if (!models.length) return;
+
+  // Compute stats per model
+  const stats = models.map(model => {
+    const d = _benchResults[model];
+    const ok = d.runs.filter(r => !r.error);
+    const lats = ok.map(r => r.latencyMs).sort((a,b) => a-b);
+    const tpsList = ok.map(r => r.tokensPerSec).filter(x => x > 0);
+    const tokList = ok.map(r => r.tokenCount);
+    const avg = lats.length ? Math.round(lats.reduce((a,b)=>a+b,0)/lats.length) : null;
+    const p95 = lats.length ? lats[Math.floor(lats.length * 0.95)] ?? lats[lats.length-1] : null;
+    const avgTps = tpsList.length ? parseFloat((tpsList.reduce((a,b)=>a+b,0)/tpsList.length).toFixed(1)) : null;
+    const avgTok = tokList.length ? Math.round(tokList.reduce((a,b)=>a+b,0)/tokList.length) : null;
+    return { model, runs: d.runs.length, errors: d.errors, avg, p95, avgTps, avgTok, lats };
+  });
+
+  // Rank to colour fastest green, slowest red
+  const avgs = stats.filter(s => s.avg != null).map(s => s.avg);
+  const minAvg = Math.min(...avgs);
+  const maxAvg = Math.max(...avgs);
+
+  tbody.innerHTML = stats.map(s => {
+    const latClass = s.avg == null ? '' : s.avg === minAvg ? 'win' : s.avg === maxAvg ? 'lose' : 'mid';
+    const tpsClass = !s.avgTps ? '' : s.avgTps === Math.max(...stats.map(x=>x.avgTps||0)) ? 'win' : '';
+
+    // Mini latency distribution dots
+    const maxLat = Math.max(...s.lats, 1);
+    const dots = s.lats.map(l => {
+      const h = Math.max(2, Math.round((l / maxLat) * 24));
+      const c = l === minAvg ? 'var(--green)' : l > maxLat * 0.8 ? 'var(--red)' : 'var(--teal)';
+      return `<div class="run-dot" style="height:${h}px;background:${c}" title="${l}ms"></div>`;
+    }).join('');
+
+    return `<tr onclick="showBenchDetail('${escHtml(s.model)}')" style="cursor:pointer">
+      <td class="bench-cell hi">${escHtml(s.model)}</td>
+      <td class="bench-cell">${s.runs - s.errors}/${s.runs}</td>
+      <td class="bench-cell ${latClass}">${s.avg != null ? s.avg+'ms' : '—'}</td>
+      <td class="bench-cell">${s.p95 != null ? s.p95+'ms' : '—'}</td>
+      <td class="bench-cell ${tpsClass}">${s.avgTps != null ? s.avgTps+' t/s' : '—'}</td>
+      <td class="bench-cell">${s.avgTok ?? '—'}</td>
+      <td class="bench-cell" style="color:${s.errors>0?'var(--red)':'var(--text2)'}">${s.errors}</td>
+      <td class="bench-cell"><div class="run-dots">${dots}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+function showBenchDetail(model) {
+  const d = _benchResults[model];
+  if (!d) return;
+  document.getElementById('bench-detail-model').textContent = model;
+  document.getElementById('bench-detail-section').style.display = '';
+  const tbody = document.getElementById('bench-detail-body');
+  tbody.innerHTML = d.runs.map((r, i) => {
+    const statusHtml = r.error
+      ? `<span style="color:var(--red)">ERROR</span>`
+      : `<span style="color:var(--green)">OK</span>`;
+    return `<tr>
+      <td class="dim">${i+1}</td>
+      <td>${r.latencyMs}ms</td>
+      <td>${r.ttftMs != null ? r.ttftMs+'ms' : '—'}</td>
+      <td style="color:var(--teal)">${r.tokensPerSec}</td>
+      <td>${r.tokenCount}</td>
+      <td>${statusHtml}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('bench-detail-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+</script>
+</body>
+</html>

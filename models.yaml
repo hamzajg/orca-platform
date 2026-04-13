@@ -1,0 +1,31 @@
+# Model manifest — defines which models should be present on which nodes.
+# On startup (and via POST /api/models/sync), the platform will compare this
+# manifest against each node's actual pulled models and pull any that are missing.
+#
+# target_nodes:
+#   - "all"            → pull on every enabled node
+#   - ["worker-linux"] → pull only on the listed node IDs
+
+models:
+  - name: llama3.2
+    target_nodes: all
+    priority: 1               # lower = pulled first at sync time
+
+  - name: mistral
+    target_nodes: all
+    priority: 2
+
+  - name: nomic-embed-text
+    target_nodes: all
+    priority: 3
+
+  - name: codellama
+    target_nodes:
+      - worker-linux
+      - worker-windows
+    priority: 4
+
+  - name: llava
+    target_nodes:
+      - worker-linux
+    priority: 5

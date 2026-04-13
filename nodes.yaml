@@ -1,0 +1,32 @@
+# Ollama worker node definitions
+# Each node must have Ollama installed and running on the specified host:port.
+# The gateway (root Linux server) is NOT listed here — it is the orchestrator.
+
+nodes:
+  - id: worker-linux
+    label: "Linux Worker"
+    host: 127.0.0.1       # ← replace with actual LAN IP
+    port: 11434
+    os: linux
+    enabled: true
+    tags:
+      - gpu
+      - high-memory
+
+  - id: worker-windows
+    label: "Windows Worker"
+    host: 127.0.0.1       # ← replace with actual LAN IP
+    port: 11434
+    os: windows
+    enabled: true
+    tags:
+      - gpu
+
+  - id: worker-macos
+    label: "macOS Worker"
+    host: 127.0.0.1       # ← replace with actual LAN IP
+    port: 11434
+    os: macos
+    enabled: true
+    tags:
+      - apple-silicon

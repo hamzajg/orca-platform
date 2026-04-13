@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  gateway:
+    build: .
+    container_name: orca-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist SQLite database across restarts
+      - ./data:/app/data
+      # Live-reload config files without rebuilding the image
+      - ./nodes.yaml:/app/nodes.yaml:ro
+      - ./models.yaml:/app/models.yaml:ro
+    env_file:
+      - .env
+    environment:
+      - DATABASE_PATH=/app/data/platform.db
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # Use host network if your workers are on the same LAN (simplest option)
+    # network_mode: host
+    # Or use bridge (default) and make sure worker IPs are routable from container
