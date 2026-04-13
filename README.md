@@ -427,7 +427,7 @@ stored in `sessionStorage` for the browser session only.
 ## Complete file structure
 
 ```
-ollama-platform/
+orca-platform/
 ├── app/
 │   ├── main.py
 │   ├── config.py

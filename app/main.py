@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Startup ───────────────────────────────────────────────────────────────
-    logger.info("━━━ Ollama Platform Gateway starting ━━━")
+    logger.info("━━━ ORCA Platform Gateway starting ━━━")
 
     # 1. Database
     await init_db()
