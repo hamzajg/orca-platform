@@ -32,6 +32,7 @@ from app.config import get_settings
 from app.db import init_db
 from app.middleware.request_id import RequestIDMiddleware
 from app.routers.admin import router as admin_router
+from app.routers.ollama_compat import router as ollama_router
 from app.routers.metrics import router as metrics_router
 from app.routers.models import router as models_router
 from app.routers.custom import router as custom_router
@@ -105,7 +106,7 @@ app = FastAPI(
         "Multi-node Ollama orchestrator with OpenAI-compatible API and "
         "custom cluster management endpoints."
     ),
-    version="0.7.0",
+    version="0.7.1",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -126,6 +127,7 @@ app.add_middleware(
 app.add_middleware(RequestIDMiddleware)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
+app.include_router(ollama_router)   # /api/version, /api/tags, /api/chat, /api/generate …
 app.include_router(openai_router)   # /v1/*
 app.include_router(admin_router)    # /api/auth/*
 app.include_router(models_router)   # /api/models/*
@@ -178,10 +180,11 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # ── Root redirect ─────────────────────────────────────────────────────────────
 
-@app.get("/", include_in_schema=False)
-async def root():
+@app.get("/api/info", include_in_schema=False)
+async def gateway_info():
+    """Gateway metadata endpoint — does not conflict with Ollama's GET / health check."""
     return {
-        "name": "Ollama Platform Gateway",
+        "name": "ORAC Platform Gateway",
         "version": "0.7.0",
         "docs": "/docs",
         "health": "/api/health",
