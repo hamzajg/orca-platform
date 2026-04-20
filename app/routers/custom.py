@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api", tags=["platform"])
 _START_TIME = time.monotonic()
 
 
-# ── Health ────────────────────────────────────────────────────────────────────
+# ── Health ───────────────────────────────────────────────────────────────────
 
 @router.get("/health", summary="Gateway liveness probe")
 async def health(request: Request):
@@ -44,7 +44,6 @@ async def health(request: Request):
     for node in nodes:
         status_counts[node.status.value] = status_counts.get(node.status.value, 0) + 1
 
-    # Best-effort metrics snapshot — never fails the health check
     metrics_snapshot: dict = {}
     try:
         ov = await get_overview("1h")
@@ -75,6 +74,52 @@ async def health(request: Request):
     }
 
 
+# ── Node Discovery (must come before /nodes/{node_id}) ─────────────────────
+
+@router.get(
+    "/nodes/scan",
+    summary="Auto-discover Ollama nodes on local network",
+    dependencies=[Depends(require_api_key)],
+)
+async def discover_nodes(request: Request):
+    """Scan local network for running Ollama instances."""
+    from app.services import discovery
+    
+    try:
+        nodes = await discovery.discover_nodes()
+        return {
+            "nodes": nodes,
+            "total": len(nodes),
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Discovery failed: {str(e)}",
+        )
+
+
+@router.get(
+    "/nodes/scan/quick",
+    summary="Quick auto-discover (faster, limited scan)",
+    dependencies=[Depends(require_api_key)],
+)
+async def quick_discover_nodes(request: Request):
+    """Quick scan of common local IPs."""
+    from app.services import discovery
+    
+    try:
+        nodes = await discovery.quick_discovery(timeout=5.0)
+        return {
+            "nodes": nodes,
+            "total": len(nodes),
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Quick discovery failed: {str(e)}",
+        )
+
+
 # ── Nodes ─────────────────────────────────────────────────────────────────────
 
 @router.get(
@@ -93,23 +138,6 @@ async def list_nodes(request: Request):
     }
 
 
-@router.get(
-    "/nodes/{node_id}",
-    summary="Get a single node by ID",
-    dependencies=[Depends(require_api_key)],
-)
-async def get_node(node_id: str, request: Request):
-    """Return detail for a single node."""
-    registry = request.app.state.registry
-    node = registry.get_node(node_id)
-    if not node:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Node '{node_id}' not found.",
-        )
-    return node.to_dict()
-
-
 @router.post(
     "/nodes/check",
     summary="Force an immediate health check on all nodes",
@@ -125,3 +153,21 @@ async def force_health_check(request: Request):
         "nodes": [{"id": n.id, "status": n.status.value} for n in nodes],
     }
 
+
+# ── Single Node (must come after /nodes/scan) ─────────────────────────────────
+
+@router.get(
+    "/nodes/{node_id}",
+    summary="Get a single node by ID",
+    dependencies=[Depends(require_api_key)],
+)
+async def get_node(node_id: str, request: Request):
+    """Return detail for a single node."""
+    registry = request.app.state.registry
+    node = registry.get_node(node_id)
+    if not node:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Node '{node_id}' not found.",
+        )
+    return node.to_dict()

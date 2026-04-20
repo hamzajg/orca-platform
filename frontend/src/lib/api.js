@@ -75,3 +75,6 @@ export const getLog       = (params)  => {
   ).toString()
   return api('/api/metrics/requests?' + q)
 }
+
+export const discoverNodes = () => api('/api/nodes/scan')
+export const quickDiscoverNodes = () => api('/api/nodes/scan/quick')

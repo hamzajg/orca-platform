@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { RefreshCw, Wifi, WifiOff, Key, ChevronDown } from 'lucide-react'
-import { setApiKey, getApiKey, getHealth, getNodes } from './lib/api'
+import { RefreshCw, Wifi, WifiOff, Menu, X } from 'lucide-react'
+import { setApiKey, getHealth, getNodes } from './lib/api'
 import { timeSince } from './lib/utils'
 
-// Pages
 import Overview    from './pages/Overview'
 import Nodes       from './pages/Nodes'
 import Models      from './pages/Models'
@@ -13,56 +12,50 @@ import RequestLog  from './pages/RequestLog'
 import Playground  from './pages/Playground'
 import Benchmark   from './pages/Benchmark'
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ message, type, visible }) {
   if (!message) return null
-  const border = type === 'ok' ? 'border-l-jade' : 'border-l-crimson'
+  const borderColor = type === 'ok' ? 'border-l-[#10b981]' : 'border-l-[#f04d4d]'
+  const icon = type === 'ok' ? '✓' : '✕'
   return (
-    <div
-      className={`
-        fixed bottom-5 right-5 z-50 border border-border-2 border-l-2 ${border}
-        bg-bg-3 rounded-md px-4 py-2.5 font-mono text-[11px] text-ink-0
-        shadow-xl transition-all duration-200
-        ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}
-      `}
-    >
-      {message}
+    <div className={`
+      fixed bottom-4 right-4 left-4 md:left-auto z-50 border border-[rgba(100,180,255,0.12)] border-l-2 ${borderColor}
+      bg-[#121b2e] rounded-lg px-4 py-3 font-sans text-sm text-[#f0f4f8]
+      shadow-xl transition-all duration-200
+      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}
+    `}>
+      <span className={type === 'ok' ? 'text-[#10b981]' : 'text-[#f04d4d]'}>{icon}</span> {message}
     </div>
   )
 }
 
-// ── Tabs config ───────────────────────────────────────────────────────────────
 const TABS = [
   { id: 'overview',   label: 'Overview'    },
   { id: 'nodes',      label: 'Nodes'       },
   { id: 'models',     label: 'Models'      },
   { id: 'metrics',    label: 'Metrics'     },
   { id: 'keys',       label: 'Keys'        },
-  { id: 'log',        label: 'Request Log' },
+  { id: 'log',        label: 'Log' },
   { id: 'playground', label: 'Playground'  },
   { id: 'benchmark',  label: 'Benchmark'   },
 ]
 
-// ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab,          setTab]         = useState('overview')
   const [apiKeyInput,  setApiKeyInput] = useState('')
   const [connected,    setConnected]   = useState(false)
   const [connecting,   setConnecting]  = useState(false)
-  const [nodeCount,    setNodeCount]   = useState(null)  // {healthy, total}
+  const [nodeCount,    setNodeCount]   = useState(null)
   const [lastRefresh,  setLastRefresh] = useState(null)
   const [toast,        setToastState]  = useState({ message: '', type: 'ok', visible: false })
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const toastTimer = useRef(null)
 
-  // Toast helper — stable ref so pages can call it without stale closure
   const showToast = useCallback((message, type = 'ok') => {
     setToastState({ message, type, visible: true })
     clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() =>
-      setToastState(s => ({ ...s, visible: false })), 3200)
+    toastTimer.current = setTimeout(() => setToastState(s => ({ ...s, visible: false })), 3000)
   }, [])
 
-  // Auto-restore from sessionStorage
   useEffect(() => {
     const stored = sessionStorage.getItem('ollama_api_key')
     if (stored) {
@@ -82,7 +75,7 @@ export default function App() {
       setConnected(true)
       setNodeCount({ healthy: health.nodes?.healthy ?? 0, total: health.nodes?.total ?? 0 })
       setLastRefresh(new Date())
-      showToast('Connected', 'ok')
+      showToast('Connected to orchestrator', 'ok')
     } catch (e) {
       setConnected(false)
       setApiKey('')
@@ -101,113 +94,154 @@ export default function App() {
 
   const PAGE_PROPS = { toast: showToast }
 
+  const handleTabClick = (tabId) => {
+    setTab(tabId)
+    setMobileMenuOpen(false)
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-bg-0 text-ink-0">
+    <div className="flex flex-col h-screen bg-[#0c1220] text-[#f0f4f8]">
+      <div className="bg-grid" />
 
-      {/* ── Topbar ── */}
-      <header className="topbar-accent relative flex items-center gap-4 h-12 px-5 bg-bg-1 border-b border-border flex-shrink-0">
+      {/* Topbar */}
+      <header className="topbar-accent nav-glass relative flex items-center justify-between h-14 px-3 md:px-5 flex-shrink-0 z-20">
 
-        {/* Logo */}
-        <div className="font-mono text-[12px] font-semibold tracking-[0.08em] text-amber whitespace-nowrap">
-          ORCA<span className="text-ink-2 font-normal">/</span>PLATFORM
-          <span className="text-ink-2 font-normal text-[10px] ml-2">v0.6</span>
+        {/* Logo & Menu Toggle */}
+        <div className="flex items-center gap-2">
+          <button 
+            className="md:hidden p-2 text-[#a8b8c8] hover:text-[#00d4ff]"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+          <div className="font-display text-sm font-semibold tracking-[0.06em] text-[#00d4ff] whitespace-nowrap flex items-center gap-2">
+            <span className="w-2 h-2 bg-[#00d4ff] rounded-sm rotate-45" />
+            <span className="hidden sm:inline">ORCA<span className="text-[#7a8a9a] font-normal">/</span>PLATFORM</span>
+          </div>
         </div>
 
-        {/* Status pills */}
-        <div className="flex items-center gap-3 ml-1">
-          <div className="flex items-center gap-1.5 font-mono text-[10px]">
-            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-              connected
-                ? 'bg-jade shadow-[0_0_6px_theme(colors.jade.DEFAULT)] animate-pulse-dot'
-                : connecting
-                  ? 'bg-amber shadow-[0_0_6px_theme(colors.amber.DEFAULT)] animate-pulse-dot'
-                  : 'bg-ink-2'
-            }`} />
-            <span className="text-ink-1">
-              {connected ? 'connected' : connecting ? 'connecting…' : 'disconnected'}
+        {/* Status - Desktop only */}
+        <div className="hidden md:flex items-center gap-3">
+          <div className="flex items-center gap-2 font-sans text-sm">
+            <StatusDot status={connected ? 'healthy' : connecting ? 'degraded' : 'unknown'} pulse={connected} />
+            <span className="text-[#a8b8c8]">
+              {connected ? 'Connected' : connecting ? 'Connecting...' : 'Disconnected'}
             </span>
           </div>
-
           {connected && nodeCount && (
-            <div className="font-mono text-[10px] text-ink-2">
-              <span className="text-jade">{nodeCount.healthy}</span>
-              <span>/{nodeCount.total} nodes</span>
+            <div className="flex items-center gap-1 font-mono text-xs text-[#7a8a9a]">
+              <span className="text-[#10b981] font-medium">{nodeCount.healthy}</span>
+              <span>/</span>
+              <span>{nodeCount.total}</span>
             </div>
           )}
         </div>
 
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Last refresh */}
-        {lastRefresh && (
-          <span className="font-mono text-[10px] text-ink-2 hidden sm:block">
-            {timeSince(lastRefresh.toISOString())}
-          </span>
-        )}
-
-        {/* Refresh */}
-        {connected && (
-          <button
-            onClick={refresh}
-            className="font-mono text-[10px] text-ink-1 hover:text-teal border border-border-2 hover:border-teal rounded px-2.5 py-1 transition-colors cursor-pointer"
-          >
-            <RefreshCw size={11} className="inline mr-1" />
-            Refresh
-          </button>
-        )}
-
-        {/* API Key input */}
+        {/* Actions */}
         <div className="flex items-center gap-2">
-          <label className="font-mono text-[9px] text-ink-2 tracking-widest hidden sm:block">API KEY</label>
-          <input
-            type="password"
-            value={apiKeyInput}
-            onChange={e => setApiKeyInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && doConnect()}
-            placeholder="paste your key…"
-            className="bg-bg-0 border border-border-2 focus:border-amber rounded px-2.5 py-1
-                       font-mono text-[11px] text-ink-0 outline-none w-48 placeholder:text-ink-3
-                       transition-colors"
-            autoComplete="off"
-          />
-          <button
-            onClick={() => doConnect()}
-            disabled={connecting}
-            className="font-mono text-[10px] font-semibold tracking-widest
-                       bg-amber-dim border border-amber text-amber rounded px-3 py-1
-                       hover:bg-[#8a5210] disabled:opacity-40 transition-colors cursor-pointer"
-          >
-            {connecting ? '…' : 'CONNECT'}
-          </button>
+          {/* Last refresh - Desktop */}
+          {lastRefresh && connected && (
+            <span className="hidden lg:block font-mono text-xs text-[#5a6a7a]">
+              {timeSince(lastRefresh.toISOString())}
+            </span>
+          )}
+
+          {/* Refresh */}
+          {connected && (
+            <button
+              onClick={refresh}
+              className="btn-ghost p-2"
+            >
+              <RefreshCw size={16} />
+            </button>
+          )}
+
+          {/* API Key */}
+          <div className="flex items-center gap-1.5">
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={e => setApiKeyInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && doConnect()}
+              placeholder="API key..."
+              className="inp-base w-24 sm:w-32 md:w-36 text-xs sm:text-sm"
+              autoComplete="off"
+            />
+            <button
+              onClick={() => doConnect()}
+              disabled={connecting}
+              className="btn-primary text-xs px-3 py-2"
+            >
+              {connecting ? '...' : 'Connect'}
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* ── Tabs ── */}
-      <nav className="flex bg-bg-1 border-b border-border px-5 flex-shrink-0">
+      {/* Tabs - Desktop */}
+      <nav className="hidden md:flex nav-glass px-5 flex-shrink-0 z-10 border-t border-[rgba(100,180,255,0.06)]">
         {TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`
-              px-4 py-2.5 font-mono text-[10px] font-medium tracking-[0.08em]
-              border-b-2 transition-colors cursor-pointer whitespace-nowrap
+              px-3 lg:px-4 py-3 font-sans text-sm font-medium
+              border-b-2 transition-all cursor-pointer whitespace-nowrap
               ${tab === t.id
-                ? 'text-amber border-amber'
-                : 'text-ink-2 border-transparent hover:text-ink-1'}
+                ? 'text-[#00d4ff] border-[#00d4ff] bg-[rgba(0,212,255,0.05)]'
+                : 'text-[#7a8a9a] border-transparent hover:text-[#a8b8c8] hover:bg-[rgba(100,180,255,0.04)]'}
             `}
           >
-            {t.label.toUpperCase()}
+            {t.label}
           </button>
         ))}
       </nav>
 
-      {/* ── Content ── */}
-      <main className="flex-1 overflow-y-auto p-5">
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div className="md:hidden nav-glass fixed inset-0 top-14 z-10 overflow-y-auto">
+          <div className="p-2">
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => handleTabClick(t.id)}
+                className={`
+                  w-full text-left px-4 py-3 font-sans text-base
+                  border-b border-[rgba(100,180,255,0.08)] transition-all cursor-pointer
+                  ${tab === t.id
+                    ? 'text-[#00d4ff] bg-[rgba(0,212,255,0.1)]'
+                    : 'text-[#a8b8c8]'}
+                `}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {/* Mobile Status */}
+          <div className="p-4 mt-4 border-t border-[rgba(100,180,255,0.12)]">
+            <div className="flex items-center gap-2 mb-2">
+              <StatusDot status={connected ? 'healthy' : connecting ? 'degraded' : 'unknown'} pulse={connected} />
+              <span className="font-sans text-sm text-[#a8b8c8]">
+                {connected ? 'Connected' : connecting ? 'Connecting...' : 'Disconnected'}
+              </span>
+            </div>
+            {connected && nodeCount && (
+              <div className="font-mono text-xs text-[#7a8a9a]">
+                {nodeCount.healthy}/{nodeCount.total} nodes
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Content */}
+      <main className="flex-1 overflow-y-auto p-3 md:p-5 z-10">
         {!connected && (
-          <div className="flex flex-col items-center justify-center h-48 gap-3 text-ink-2">
-            <WifiOff size={32} className="opacity-30" />
-            <p className="font-mono text-[11px]">Enter your API key and click CONNECT</p>
+          <div className="flex flex-col items-center justify-center h-64 gap-4">
+            <WifiOff size={48} className="text-[#5a6a7a]" />
+            <p className="font-sans text-base text-[#7a8a9a] text-center px-4">
+              Enter your API key to connect to the orchestrator
+            </p>
           </div>
         )}
 
@@ -225,8 +259,23 @@ export default function App() {
         )}
       </main>
 
-      {/* ── Toast ── */}
       <Toast message={toast.message} type={toast.type} visible={toast.visible} />
     </div>
+  )
+}
+
+function StatusDot({ status, pulse = false }) {
+  const classes = {
+    healthy:  'bg-[#10b981]',
+    degraded: 'bg-[#f59e0b]',
+    offline:  'bg-[#f04d4d]',
+    unknown:  'bg-[#5a6a7a]',
+  }[status] || 'bg-[#5a6a7a]'
+  return (
+    <span className={`
+      inline-block w-2 h-2 rounded-full flex-shrink-0
+      ${classes}
+      ${pulse ? 'status-pulse-healthy' : ''}
+    `} />
   )
 }
