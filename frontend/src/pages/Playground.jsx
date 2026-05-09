@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, Square, Trash2, ChevronDown } from 'lucide-react'
+import { Send, Square, Trash2, ChevronDown, ImagePlus, X } from 'lucide-react'
 import { Card, SectionTitle, FormGroup, Input, Select, Textarea, Btn, Spinner } from '../components/ui'
 import { getModels, apiFetch, streamSSE, BASE } from '../lib/api'
 import { getApiKey } from '../lib/api'
@@ -14,12 +14,14 @@ export default function Playground({ toast }) {
   const [topP, setTopP]         = useState('1')
   const [seed, setSeed]         = useState('')
   const [stream, setStream]     = useState(true)
-  const [history, setHistory]   = useState([])  // [{role,content}]
+  const [history, setHistory]   = useState([])
   const [output, setOutput]     = useState('')
   const [sending, setSending]   = useState(false)
   const [stats, setStats]       = useState(null)
+  const [images, setImages]     = useState([])       // [{id, name, dataUrl}]
   const stopRef                 = useRef(false)
   const outputRef               = useRef(null)
+  const fileInputRef            = useRef(null)
 
   useEffect(() => {
     getModels().then(d => {
@@ -31,7 +33,7 @@ export default function Playground({ toast }) {
 
   const send = async () => {
     if (!model)  return toast('Select a model', 'err')
-    if (!prompt.trim()) return toast('Enter a message', 'err')
+    if (!prompt.trim() && images.length === 0) return toast('Enter a message', 'err')
     setSending(true)
     stopRef.current = false
     setOutput('')
@@ -40,12 +42,22 @@ export default function Playground({ toast }) {
     const messages = []
     if (system.trim()) messages.push({ role: 'system', content: system.trim() })
     messages.push(...history)
-    messages.push({ role: 'user', content: prompt.trim() })
+
+    const userContent = images.length > 0
+      ? [
+          { type: 'text', text: prompt.trim() || 'Describe this image' },
+          ...images.map(img => ({ type: 'image_url', image_url: { url: img.dataUrl } }))
+        ]
+      : prompt.trim()
+
+    messages.push({ role: 'user', content: userContent })
 
     const body = { model, messages, stream, temperature: parseFloat(temp)||0.7, max_tokens: parseInt(maxTok)||512, top_p: parseFloat(topP)||1 }
     if (seed.trim()) body.seed = parseInt(seed)
     const userPrompt = prompt.trim()
+    const currentImages = [...images]
     setPrompt('')
+    setImages([])
 
     const t0 = performance.now()
     let ttft = null, fullText = '', tokenCount = 0
@@ -87,7 +99,10 @@ export default function Playground({ toast }) {
         tps: tokenCount > 0 ? (tokenCount / (totalMs / 1000)).toFixed(1) : null,
         tokens: tokenCount,
       })
-      setHistory(h => [...h, { role: 'user', content: userPrompt }, { role: 'assistant', content: fullText }])
+      const userMsg = currentImages.length > 0
+        ? { role: 'user', content: userPrompt, images: currentImages.map(i => ({ name: i.name, dataUrl: i.dataUrl })) }
+        : { role: 'user', content: userPrompt }
+      setHistory(h => [...h, userMsg, { role: 'assistant', content: fullText }])
 
     } catch (e) {
       if (!stopRef.current) {
@@ -98,6 +113,23 @@ export default function Playground({ toast }) {
   }
 
   const stop = () => { stopRef.current = true; setSending(false) }
+
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files || [])
+    const readers = files.map(file => new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve({ id: crypto.randomUUID(), name: file.name, dataUrl: reader.result })
+      reader.readAsDataURL(file)
+    }))
+    Promise.all(readers).then(results => {
+      setImages(prev => [...prev, ...results])
+    })
+    e.target.value = ''
+  }
+
+  const removeImage = (id) => {
+    setImages(prev => prev.filter(img => img.id !== id))
+  }
 
   const handleKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sending) send() }
@@ -147,7 +179,7 @@ export default function Playground({ toast }) {
           <Card className="p-4">
             <div className="flex justify-between items-center mb-2">
               <div className="font-mono text-[9px] font-semibold tracking-widest text-ink-2 uppercase">Chat history</div>
-              <Btn size="sm" variant="ghost" onClick={() => { setHistory([]); setOutput(''); setStats(null) }}>
+              <Btn size="sm" variant="ghost" onClick={() => { setHistory([]); setOutput(''); setStats(null); setImages([]) }}>
                 <Trash2 size={10} /> Clear
               </Btn>
             </div>
@@ -156,7 +188,12 @@ export default function Playground({ toast }) {
               : history.map((m, i) => (
                 <div key={i} className="font-mono text-[9px] mb-1 leading-relaxed">
                   <span className={m.role === 'user' ? 'text-amber' : 'text-teal'}>{m.role}: </span>
-                  <span className="text-ink-2">{m.content.slice(0, 70)}{m.content.length > 70 ? '…' : ''}</span>
+                  <span className="text-ink-2">
+                    {m.content.slice(0, 70)}{m.content.length > 70 ? '…' : ''}
+                    {m.images?.length > 0 && (
+                      <span className="text-ink-1 ml-1">[{m.images.length} img]</span>
+                    )}
+                  </span>
                 </div>
               ))
             }
@@ -178,15 +215,53 @@ export default function Playground({ toast }) {
                   className="w-full"
                 />
               </FormGroup>
+              {images.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {images.map(img => (
+                    <div key={img.id} className="relative group">
+                      <img
+                        src={img.dataUrl}
+                        alt={img.name}
+                        className="w-16 h-16 object-cover rounded border border-border"
+                      />
+                      <button
+                        onClick={() => removeImage(img.id)}
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-crimson text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={10} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            {sending
-              ? <Btn variant="crimson" onClick={stop} className="self-end px-4 py-2">
-                  <Square size={12} /> Stop
-                </Btn>
-              : <Btn variant="amber" onClick={send} className="self-end px-4 py-2">
-                  <Send size={12} /> Send
-                </Btn>
-            }
+            <div className="flex gap-1 self-end">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="px-2"
+                title="Attach images"
+              >
+                <ImagePlus size={14} />
+              </Btn>
+              {sending
+                ? <Btn variant="crimson" onClick={stop} className="px-4 py-2">
+                    <Square size={12} /> Stop
+                  </Btn>
+                : <Btn variant="amber" onClick={send} className="px-4 py-2">
+                    <Send size={12} /> Send
+                  </Btn>
+              }
+            </div>
           </div>
 
           {/* Stats bar */}

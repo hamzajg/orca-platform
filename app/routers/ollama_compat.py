@@ -104,6 +104,24 @@ async def _ndjson_stream(
             yield chunk
 
 
+async def _safe_ndjson_stream(
+    node_url: str,
+    path: str,
+    body: dict,
+    node_id: str,
+) -> AsyncGenerator[bytes, None]:
+    """Like _ndjson_stream but catches upstream errors and yields them as NDJSON."""
+    try:
+        async for chunk in _ndjson_stream(node_url, path, body):
+            yield chunk
+    except httpx.HTTPStatusError as exc:
+        logger.error("Upstream node %s error on %s: %s", node_id, path, exc.response.text[:200])
+        yield json.dumps({"error": exc.response.text}).encode()
+    except Exception as exc:
+        logger.error("Unexpected error from node %s on %s: %s", node_id, path, exc)
+        yield json.dumps({"error": str(exc)}).encode()
+
+
 # ── Root health check ─────────────────────────────────────────────────────────
 # Many clients (Open WebUI, Continue.dev) hit GET / first to verify the server.
 
@@ -179,10 +197,10 @@ async def api_chat(request: Request, api_key: str = Depends(require_api_key)):
 
     async def _stream_and_log():
         prompt_tokens = completion_tokens = 0
+        error_text = None
         try:
             async for chunk in _ndjson_stream(node.base_url, "/api/chat", body):
                 yield chunk
-                # Parse last chunk for token counts (best-effort)
                 try:
                     data = json.loads(chunk)
                     if data.get("done"):
@@ -190,6 +208,14 @@ async def api_chat(request: Request, api_key: str = Depends(require_api_key)):
                         completion_tokens = data.get("eval_count", 0) or 0
                 except Exception:
                     pass
+        except httpx.HTTPStatusError as exc:
+            error_text = exc.response.text[:500]
+            logger.error("Upstream node %s error on /api/chat: %s", node.id, error_text)
+            yield json.dumps({"error": exc.response.text}).encode()
+        except Exception as exc:
+            error_text = str(exc)[:500]
+            logger.exception("Unexpected streaming error from node %s", node.id)
+            yield json.dumps({"error": str(exc)}).encode()
         finally:
             await log_request(
                 request_id=request_id,
@@ -201,6 +227,7 @@ async def api_chat(request: Request, api_key: str = Depends(require_api_key)):
                 latency_ms=round((time.monotonic() - t0) * 1000, 2),
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
+                error=error_text,
                 streaming=body.get("stream", True),
                 api_key_hint=api_key,
             )
@@ -213,22 +240,32 @@ async def api_chat(request: Request, api_key: str = Depends(require_api_key)):
             headers={"X-Accel-Buffering": "no"},
         )
     else:
-        # Non-streaming: collect full response then return as JSON
         chunks = []
-        async for chunk in _ndjson_stream(node.base_url, "/api/chat", body):
-            chunks.append(chunk)
+        error_text = None
+        try:
+            async for chunk in _ndjson_stream(node.base_url, "/api/chat", body):
+                chunks.append(chunk)
+        except httpx.HTTPStatusError as exc:
+            error_text = exc.response.text[:500]
+            raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text)
+        except Exception as exc:
+            error_text = str(exc)[:500]
+            logger.exception("Non-streaming /api/chat failed")
+            raise HTTPException(status_code=502, detail=str(exc))
+        finally:
+            await log_request(
+                request_id=request_id,
+                node_id=node.id,
+                model=model,
+                endpoint="/api/chat",
+                method="POST",
+                status_code=200 if not error_text else 502,
+                latency_ms=round((time.monotonic() - t0) * 1000, 2),
+                error=error_text,
+                streaming=False,
+                api_key_hint=api_key,
+            )
         raw = b"".join(chunks)
-        await log_request(
-            request_id=request_id,
-            node_id=node.id,
-            model=model,
-            endpoint="/api/chat",
-            method="POST",
-            status_code=200,
-            latency_ms=round((time.monotonic() - t0) * 1000, 2),
-            streaming=False,
-            api_key_hint=api_key,
-        )
         return Response(content=raw, media_type="application/json")
 
 
@@ -246,6 +283,7 @@ async def api_generate(request: Request, api_key: str = Depends(require_api_key)
 
     async def _stream_and_log():
         prompt_tokens = completion_tokens = 0
+        error_text = None
         try:
             async for chunk in _ndjson_stream(node.base_url, "/api/generate", body):
                 yield chunk
@@ -256,6 +294,14 @@ async def api_generate(request: Request, api_key: str = Depends(require_api_key)
                         completion_tokens = data.get("eval_count", 0) or 0
                 except Exception:
                     pass
+        except httpx.HTTPStatusError as exc:
+            error_text = exc.response.text[:500]
+            logger.error("Upstream node %s error on /api/generate: %s", node.id, error_text)
+            yield json.dumps({"error": exc.response.text}).encode()
+        except Exception as exc:
+            error_text = str(exc)[:500]
+            logger.exception("Unexpected streaming error from node %s", node.id)
+            yield json.dumps({"error": str(exc)}).encode()
         finally:
             await log_request(
                 request_id=request_id,
@@ -267,6 +313,7 @@ async def api_generate(request: Request, api_key: str = Depends(require_api_key)
                 latency_ms=round((time.monotonic() - t0) * 1000, 2),
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
+                error=error_text,
                 streaming=body.get("stream", True),
                 api_key_hint=api_key,
             )
@@ -280,20 +327,31 @@ async def api_generate(request: Request, api_key: str = Depends(require_api_key)
         )
     else:
         chunks = []
-        async for chunk in _ndjson_stream(node.base_url, "/api/generate", body):
-            chunks.append(chunk)
+        error_text = None
+        try:
+            async for chunk in _ndjson_stream(node.base_url, "/api/generate", body):
+                chunks.append(chunk)
+        except httpx.HTTPStatusError as exc:
+            error_text = exc.response.text[:500]
+            raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text)
+        except Exception as exc:
+            error_text = str(exc)[:500]
+            logger.exception("Non-streaming /api/generate failed")
+            raise HTTPException(status_code=502, detail=str(exc))
+        finally:
+            await log_request(
+                request_id=request_id,
+                node_id=node.id,
+                model=model,
+                endpoint="/api/generate",
+                method="POST",
+                status_code=200 if not error_text else 502,
+                latency_ms=round((time.monotonic() - t0) * 1000, 2),
+                error=error_text,
+                streaming=False,
+                api_key_hint=api_key,
+            )
         raw = b"".join(chunks)
-        await log_request(
-            request_id=request_id,
-            node_id=node.id,
-            model=model,
-            endpoint="/api/generate",
-            method="POST",
-            status_code=200,
-            latency_ms=round((time.monotonic() - t0) * 1000, 2),
-            streaming=False,
-            api_key_hint=api_key,
-        )
         return Response(content=raw, media_type="application/json")
 
 
@@ -375,7 +433,7 @@ async def api_pull(request: Request):
         raise HTTPException(status_code=503, detail="No healthy nodes available.")
 
     return StreamingResponse(
-        _ndjson_stream(node.base_url, "/api/pull", body),
+        _safe_ndjson_stream(node.base_url, "/api/pull", body, node.id),
         media_type="application/x-ndjson",
         headers={"X-Accel-Buffering": "no"},
     )
@@ -467,14 +525,19 @@ async def api_create(request: Request):
     stream = body.get("stream", True)
     if stream:
         return StreamingResponse(
-            _ndjson_stream(node.base_url, "/api/create", body),
+            _safe_ndjson_stream(node.base_url, "/api/create", body, node.id),
             media_type="application/x-ndjson",
             headers={"X-Accel-Buffering": "no"},
         )
     else:
         chunks = []
-        async for chunk in _ndjson_stream(node.base_url, "/api/create", body):
-            chunks.append(chunk)
+        try:
+            async for chunk in _ndjson_stream(node.base_url, "/api/create", body):
+                chunks.append(chunk)
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
         return Response(content=b"".join(chunks), media_type="application/json")
 
 
@@ -490,14 +553,19 @@ async def api_push(request: Request):
     stream = body.get("stream", True)
     if stream:
         return StreamingResponse(
-            _ndjson_stream(node.base_url, "/api/push", body),
+            _safe_ndjson_stream(node.base_url, "/api/push", body, node.id),
             media_type="application/x-ndjson",
             headers={"X-Accel-Buffering": "no"},
         )
     else:
         chunks = []
-        async for chunk in _ndjson_stream(node.base_url, "/api/push", body):
-            chunks.append(chunk)
+        try:
+            async for chunk in _ndjson_stream(node.base_url, "/api/push", body):
+                chunks.append(chunk)
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
         return Response(content=b"".join(chunks), media_type="application/json")
 
 

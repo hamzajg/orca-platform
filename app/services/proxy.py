@@ -53,11 +53,57 @@ async def close_http_client() -> None:
 
 # ── Request translation: OpenAI → Ollama ──────────────────────────────────────
 
+def _translate_messages(messages: list[dict]) -> list[dict]:
+    """Translate OpenAI content array format (text + image_url/video_url parts) to
+    Ollama format (content string + images array).
+
+    Handles:
+      - ``type: \"text\"``          → appended to content string
+      - ``type: \"image_url\"``     → base64 extracted from data URI, added to images
+      - ``type: \"video_url\"``     → base64 extracted from data URI, added to images
+    """
+    translated: list[dict] = []
+    for msg in messages:
+        content = msg.get("content")
+        if not isinstance(content, list):
+            translated.append(msg)
+            continue
+
+        text_parts: list[str] = []
+        images: list[str] = []
+        for part in content:
+            if not isinstance(part, dict):
+                text_parts.append(str(part))
+                continue
+            part_type = part.get("type", "")
+            if part_type == "text":
+                text_parts.append(part.get("text", ""))
+            elif part_type in ("image_url", "video_url"):
+                url_key = "image_url" if part_type == "image_url" else "video_url"
+                url = part.get(url_key, {}).get("url", "")
+                if url:
+                    if url.startswith("data:"):
+                        b64_data = url.split("base64,", 1)[-1] if "base64," in url else url
+                        images.append(b64_data)
+                    else:
+                        images.append(url)
+
+        new_msg = dict(msg)
+        new_msg["content"] = " ".join(text_parts) if text_parts else ""
+        if images:
+            new_msg["images"] = images
+        translated.append(new_msg)
+
+    return translated
+
+
 def _chat_to_ollama(body: dict) -> dict:
-    """Translate an OpenAI chat/completions body to Ollama /api/chat format."""
+    """Translate an OpenAI chat/completions body to Ollama /api/chat format.
+    Handles vision requests by converting image_url content parts
+    to the Ollama images array."""
     ollama: dict[str, Any] = {
         "model": body["model"],
-        "messages": body.get("messages", []),
+        "messages": _translate_messages(body.get("messages", [])),
         "stream": body.get("stream", False),
     }
     options: dict[str, Any] = dict(body.get("options") or {})
