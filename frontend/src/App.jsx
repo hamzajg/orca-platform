@@ -11,6 +11,7 @@ import Keys        from './pages/Keys'
 import RequestLog  from './pages/RequestLog'
 import Playground  from './pages/Playground'
 import Benchmark   from './pages/Benchmark'
+import FineTune    from './pages/FineTune'
 
 function Toast({ message, type, visible }) {
   if (!message) return null
@@ -34,9 +35,10 @@ const TABS = [
   { id: 'models',     label: 'Models'      },
   { id: 'metrics',    label: 'Metrics'     },
   { id: 'keys',       label: 'Keys'        },
-  { id: 'log',        label: 'Log' },
+  { id: 'log',        label: 'Log'         },
   { id: 'playground', label: 'Playground'  },
   { id: 'benchmark',  label: 'Benchmark'   },
+  { id: 'fine-tune',  label: 'Fine-tune'   },
 ]
 
 export default function App() {
@@ -255,6 +257,7 @@ export default function App() {
             {tab === 'log'        && <RequestLog  {...PAGE_PROPS} />}
             {tab === 'playground' && <Playground  {...PAGE_PROPS} />}
             {tab === 'benchmark'  && <Benchmark   {...PAGE_PROPS} />}
+            {tab === 'fine-tune'  && <FineTune    {...PAGE_PROPS} />}
           </div>
         )}
       </main>

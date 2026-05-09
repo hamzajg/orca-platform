@@ -77,11 +77,45 @@ CREATE TABLE IF NOT EXISTS models (
 );
 """
 
+_CREATE_FINE_TUNE_JOBS = """
+CREATE TABLE IF NOT EXISTS fine_tune_jobs (
+    id           TEXT PRIMARY KEY,
+    name         TEXT,
+    base_model   TEXT,
+    method       TEXT,
+    dataset_source TEXT,
+    dataset_format TEXT,
+    hyperparameters TEXT,
+    output_model_name TEXT,
+    target_node_id TEXT,
+    status       TEXT,
+    progress     REAL DEFAULT 0,
+    log          TEXT,
+    error        TEXT,
+    schedule_at  TEXT,
+    started_at   TEXT,
+    finished_at  TEXT,
+    created_at   TEXT DEFAULT (datetime('now')),
+    created_by   TEXT
+);
+"""
+
+_CREATE_DATASETS = """
+CREATE TABLE IF NOT EXISTS datasets (
+    id           TEXT PRIMARY KEY,
+    name         TEXT,
+    path         TEXT,
+    size         INTEGER,
+    created_at   TEXT DEFAULT (datetime('now'))
+);
+"""
+
 _INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_requests_ts       ON requests(ts);",
     "CREATE INDEX IF NOT EXISTS idx_requests_node_id  ON requests(node_id);",
     "CREATE INDEX IF NOT EXISTS idx_requests_model    ON requests(model);",
     "CREATE INDEX IF NOT EXISTS idx_models_node_id    ON models(node_id);",
+    "CREATE INDEX IF NOT EXISTS idx_fine_tune_status  ON fine_tune_jobs(status);",
 ]
 
 # audit_log DDL is imported from services.audit_log to keep it co-located
@@ -101,6 +135,8 @@ async def init_db() -> None:
         await db.execute(_CREATE_NODES)
         await db.execute(_CREATE_REQUESTS)
         await db.execute(_CREATE_MODELS)
+        await db.execute(_CREATE_FINE_TUNE_JOBS)
+        await db.execute(_CREATE_DATASETS)
         for idx in _INDEXES:
             await db.execute(idx)
 

@@ -21,6 +21,7 @@ Run with:
 from __future__ import annotations
 
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -37,6 +38,8 @@ from app.routers.metrics import router as metrics_router
 from app.routers.models import router as models_router
 from app.routers.custom import router as custom_router
 from app.routers.openai_compat import router as openai_router
+from app.routers.fine_tune import router as fine_tune_router
+from app.services.fine_tuner import fine_tuner
 from app.services.key_store import KeyStore
 from app.services.model_manager import ModelManager
 from app.services.node_registry import NodeRegistry
@@ -85,6 +88,9 @@ async def lifespan(app: FastAPI):
     app.state.model_manager = model_manager
     await model_manager.startup(registry)
 
+    # 6. Fine-tuner scheduler
+    fine_tuner_task = asyncio.create_task(fine_tuner.run_scheduler())
+
     healthy = registry.get_healthy_count()
     total   = len(registry.get_all_nodes())
     logger.info("━━━ Gateway ready — %d/%d nodes healthy ━━━", healthy, total)
@@ -93,6 +99,7 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
     logger.info("Shutting down gateway…")
+    fine_tuner_task.cancel()
     await registry.shutdown()
     await close_http_client()
     logger.info("Gateway stopped.")
@@ -133,6 +140,7 @@ app.include_router(admin_router)    # /api/auth/*
 app.include_router(models_router)   # /api/models/*
 app.include_router(metrics_router)  # /api/metrics/*
 app.include_router(custom_router)   # /api/*
+app.include_router(fine_tune_router) # /api/fine-tune/*
 
 
 # ── Static files ─────────────────────────────────────────────────────────────
