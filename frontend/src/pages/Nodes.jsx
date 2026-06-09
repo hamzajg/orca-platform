@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { RefreshCw, Zap, Search, Wifi, WifiOff, X, Plus, Loader2 } from 'lucide-react'
 import { SectionTitle, Btn, Empty, Spinner, Badge, Card, Chip } from '../components/ui'
 import NodeCard from '../components/NodeCard'
-import { getNodes, discoverNodes, quickDiscoverNodes, api } from '../lib/api'
+import { getNodes, discoverNodes, quickDiscoverNodes, api, addNode } from '../lib/api'
 
 function DiscoveryModal({ onClose, onAddNode, toast }) {
   const [discovering, setDiscovering] = useState(false)
@@ -155,7 +155,15 @@ export default function Nodes({ toast }) {
   }
 
   const handleAddNode = async (discoveredNode) => {
-    toast(`Node ${discoveredNode.host} added (manual registration coming soon)`, 'ok')
+    try {
+      await addNode(discoveredNode.host, discoveredNode.port, discoveredNode.host)
+      toast(`✓ Node ${discoveredNode.host} added successfully`, 'ok')
+      // Close modal and refresh nodes list after adding
+      setShowDiscovery(false)
+      await load()
+    } catch (e) {
+      toast(`Failed to add node: ${e.message}`, 'err')
+    }
   }
 
   useEffect(() => { load() }, [])

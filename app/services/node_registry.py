@@ -276,6 +276,75 @@ class NodeRegistry:
     def get_node(self, node_id: str) -> Optional[Node]:
         return self._nodes.get(node_id)
 
+    def get_node_by_address(self, host: str, port: int) -> Optional[Node]:
+        """Find a node by host and port."""
+        for node in self._nodes.values():
+            if node.host == host and node.port == port:
+                return node
+        return None
+
+    async def add_node(
+        self,
+        node_id: str,
+        label: str,
+        host: str,
+        port: int,
+        os: str = "unknown",
+        tags: list[str] | None = None,
+    ) -> Node:
+        """
+        Add a new node to the registry and persist to database.
+        Raises ValueError if node_id already exists.
+        """
+        if node_id in self._nodes:
+            raise ValueError(f"Node with id '{node_id}' already exists")
+        
+        tags = tags or []
+        node = Node(
+            id=node_id,
+            label=label,
+            host=host,
+            port=port,
+            os=os,
+            enabled=True,
+            tags=tags,
+        )
+        
+        self._nodes[node_id] = node
+        await self._insert_node(node)
+        logger.info("Node %s added manually: %s:%d", node_id, host, port)
+        return node
+
+    async def _insert_node(self, node: Node) -> None:
+        """Insert a single node into the database."""
+        async with get_db() as db:
+            await db.execute(
+                """
+                INSERT INTO nodes
+                    (id, label, host, port, os, enabled, tags, status)
+                VALUES
+                    (:id, :label, :host, :port, :os, :enabled, :tags, :status)
+                ON CONFLICT(id) DO UPDATE SET
+                    label   = excluded.label,
+                    host    = excluded.host,
+                    port    = excluded.port,
+                    os      = excluded.os,
+                    enabled = excluded.enabled,
+                    tags    = excluded.tags
+                """,
+                {
+                    "id": node.id,
+                    "label": node.label,
+                    "host": node.host,
+                    "port": node.port,
+                    "os": node.os,
+                    "enabled": int(node.enabled),
+                    "tags": json.dumps(node.tags),
+                    "status": node.status.value,
+                },
+            )
+            await db.commit()
+
     def get_healthy_count(self) -> int:
         return sum(1 for n in self._nodes.values() if n.status == NodeStatus.HEALTHY)
 

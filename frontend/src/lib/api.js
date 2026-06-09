@@ -78,3 +78,9 @@ export const getLog       = (params)  => {
 
 export const discoverNodes = () => api('/api/nodes/scan')
 export const quickDiscoverNodes = () => api('/api/nodes/scan/quick')
+export const addNode = (host, port = 11434, label = '', tags = []) =>
+  api('/api/nodes', {
+    method: 'POST',
+    body: JSON.stringify({ host, port, label, tags }),
+  })
+

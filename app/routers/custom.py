@@ -19,6 +19,7 @@ import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
 
 from app.middleware.auth import require_api_key
 
@@ -27,7 +28,27 @@ router = APIRouter(prefix="/api", tags=["platform"])
 _START_TIME = time.monotonic()
 
 
-# ── Health ───────────────────────────────────────────────────────────────────
+# ── Pydantic Models ──────────────────────────────────────────────────────────
+
+class AddNodeRequest(BaseModel):
+    """Request body for manually adding a new node."""
+    host: str = Field(..., description="Hostname or IP address of the Ollama node")
+    port: int = Field(default=11434, description="Ollama API port (default: 11434)")
+    label: str = Field(default="", description="Human-readable label for the node (optional)")
+    tags: list[str] = Field(default_factory=list, description="Tags/labels for categorizing the node (optional)")
+
+
+class AddNodeResponse(BaseModel):
+    """Response body when a node is successfully added."""
+    node_id: str
+    host: str
+    port: int
+    label: str
+    status: str
+    message: str
+
+
+
 
 @router.get("/health", summary="Gateway liveness probe")
 async def health(request: Request):
@@ -136,6 +157,75 @@ async def list_nodes(request: Request):
         "total": len(nodes),
         "healthy": registry.get_healthy_count(),
     }
+
+
+@router.post(
+    "/nodes",
+    summary="Manually register a discovered node",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_api_key)],
+)
+async def add_node(body: AddNodeRequest, request: Request) -> AddNodeResponse:
+    """
+    Manually add a discovered Ollama node to the registry.
+    Validates node availability before persisting.
+    """
+    from app.services import discovery
+    
+    registry = request.app.state.registry
+    
+    # Validate node is reachable
+    try:
+        discovered = await discovery.check_ollama_node(body.host, body.port)
+        if not discovered:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No Ollama instance found at {body.host}:{body.port}",
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to reach node at {body.host}:{body.port}: {str(e)}",
+        )
+    
+    # Check for duplicate (same host:port)
+    existing = registry.get_node_by_address(body.host, body.port)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Node at {body.host}:{body.port} is already registered (id: {existing.id})",
+        )
+    
+    # Generate node_id if not provided
+    node_id = f"manual-{body.host.replace('.', '-')}-{body.port}"
+    
+    # Create and add the node
+    try:
+        node = await registry.add_node(
+            node_id=node_id,
+            label=body.label or body.host,
+            host=body.host,
+            port=body.port,
+            os=discovered.os_info or "unknown",
+            tags=body.tags,
+        )
+        
+        # Trigger immediate health check so UI sees real status
+        await registry.trigger_immediate_check()
+        
+        return AddNodeResponse(
+            node_id=node.id,
+            host=node.host,
+            port=node.port,
+            label=node.label,
+            status=node.status.value,
+            message=f"Node {node.label} added successfully",
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
 
 
 @router.post(
