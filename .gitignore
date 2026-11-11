@@ -320,3 +320,7 @@ pyrightconfig.json
 pyvenv.cfg
 pip-selfcheck.json
 
+
+# Local runtime data
+data/
+*.db
