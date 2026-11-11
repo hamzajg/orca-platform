@@ -81,6 +81,7 @@ _CREATE_FINE_TUNE_JOBS = """
 CREATE TABLE IF NOT EXISTS fine_tune_jobs (
     id           TEXT PRIMARY KEY,
     name         TEXT,
+    description  TEXT,
     base_model   TEXT,
     method       TEXT,
     dataset_source TEXT,

@@ -7,8 +7,13 @@ from app.db import get_db
 
 logger = logging.getLogger(__name__)
 
+
 class FineTuneManager:
+    #: Job states from which a cancel request is accepted.
+    CANCELLABLE = {"draft", "scheduled", "queued", "running"}
+
     def __init__(self):
+        # job_id -> asyncio.Task for jobs currently being executed.
         self.running_jobs = {}
 
     async def create_job(self, data):
@@ -53,13 +58,67 @@ class FineTuneManager:
                 jobs = await self.get_jobs(status='queued')
                 for job in jobs:
                     if job['id'] not in self.running_jobs:
-                        asyncio.create_task(self._execute_job(job['id']))
+                        self._start_job(job['id'])
             except Exception as e:
                 logger.error(f"Scheduler error: {e}")
             await asyncio.sleep(15)
 
+    def _start_job(self, job_id):
+        """
+        Start a job's training task and track it so it can be cancelled.
+
+        Tracking the task (rather than a bare boolean) is what lets
+        `cancel_job` actually stop an in-flight run.
+        """
+        task = asyncio.create_task(self._execute_job(job_id))
+        self.running_jobs[job_id] = task
+        task.add_done_callback(lambda _t, jid=job_id: self.running_jobs.pop(jid, None))
+        return task
+
+    async def cancel_job(self, job_id):
+        """
+        Cancel a job that is queued, scheduled or running.
+
+        Returns the updated job dict, or ``None`` if no such job exists.
+        Raises ``ValueError`` if the job exists but is not in a cancellable state.
+        """
+        job = await self.get_job(job_id)
+        if job is None:
+            return None
+        if job['status'] not in self.CANCELLABLE:
+            raise ValueError(f"Job is not cancellable (status={job['status']})")
+
+        task = self.running_jobs.pop(job_id, None)
+        if task is not None and not task.done():
+            task.cancel()
+
+        async with get_db() as db:
+            await db.execute(
+                "UPDATE fine_tune_jobs SET status = 'failed', error = ?, finished_at = ? WHERE id = ?",
+                ("Cancelled by user", datetime.now().isoformat(), job_id),
+            )
+            await db.commit()
+        return await self.get_job(job_id)
+
+    async def delete_job(self, job_id):
+        """
+        Delete a job record.
+
+        Returns ``True`` if a row was deleted, ``False`` if the job doesn't exist.
+        Raises ``ValueError`` if the job is currently running — cancel it first.
+        """
+        job = await self.get_job(job_id)
+        if job is None:
+            return False
+        if job['status'] == 'running' or job_id in self.running_jobs:
+            raise ValueError("Cannot delete a running job; cancel it first")
+
+        async with get_db() as db:
+            await db.execute("DELETE FROM fine_tune_jobs WHERE id = ?", (job_id,))
+            await db.commit()
+        return True
+
     async def _execute_job(self, job_id):
-        self.running_jobs[job_id] = True
         try:
             # Placeholder for training logic
             logger.info(f"Starting job {job_id}")
@@ -75,7 +134,11 @@ class FineTuneManager:
                 await db.execute("UPDATE fine_tune_jobs SET status = 'completed', finished_at = ? WHERE id = ?", 
                                  (datetime.now().isoformat(), job_id))
                 await db.commit()
+        except asyncio.CancelledError:
+            logger.info(f"Job {job_id} cancelled")
+            raise
         finally:
-            del self.running_jobs[job_id]
+            self.running_jobs.pop(job_id, None)
+
 
 fine_tuner = FineTuneManager()

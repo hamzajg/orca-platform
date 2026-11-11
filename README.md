@@ -160,6 +160,32 @@ curl http://localhost:8000/api/models \
   -H "X-API-Key: your-key"
 ```
 
+#### Fine-tuning jobs
+
+Create a job (runs as a background subprocess — see `FINE_TUNE_PLAN.md`):
+```bash
+curl -X POST http://localhost:8000/api/fine-tune/jobs \
+  -H "X-API-Key: your-key" -H "Content-Type: application/json" \
+  -d '{"name":"my-lora","base_model":"llama3.2","method":"lora",
+       "dataset_source":"/data/dataset.jsonl","dataset_format":"alpaca",
+       "hyperparameters":{"epochs":3},"output_model_name":"my-lora"}'
+# → {"id":"<job-id>"}
+```
+
+List / inspect / trigger:
+```bash
+curl "http://localhost:8000/api/fine-tune/jobs?status=queued" -H "X-API-Key: your-key"
+curl "http://localhost:8000/api/fine-tune/jobs/<job-id>"        -H "X-API-Key: your-key"
+curl -X POST "http://localhost:8000/api/fine-tune/jobs/<job-id>/run" -H "X-API-Key: your-key"
+```
+
+Cancel a queued/running job (returns 409 once it has finished), or delete a
+terminal job (returns 409 while it is still running):
+```bash
+curl -X POST   "http://localhost:8000/api/fine-tune/jobs/<job-id>/cancel" -H "X-API-Key: your-key"
+curl -X DELETE "http://localhost:8000/api/fine-tune/jobs/<job-id>"        -H "X-API-Key: your-key"
+```
+
 ---
 
 ## Project Structure
