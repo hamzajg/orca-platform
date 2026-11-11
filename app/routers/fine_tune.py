@@ -28,6 +28,26 @@ async def run_job(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     # Manually trigger execution
-    import asyncio
-    asyncio.create_task(fine_tuner._execute_job(job_id))
+    fine_tuner._start_job(job_id)
     return {"status": "triggered"}
+
+@router.post("/jobs/{job_id}/cancel", response_model=dict)
+async def cancel_job(job_id: str):
+    try:
+        job = await fine_tuner.cancel_job(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+@router.delete("/jobs/{job_id}", response_model=dict)
+async def delete_job(job_id: str):
+    try:
+        deleted = await fine_tuner.delete_job(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"status": "deleted", "id": job_id}
+
