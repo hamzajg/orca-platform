@@ -100,6 +100,8 @@ async def lifespan(app: FastAPI):
     # ── Shutdown ──────────────────────────────────────────────────────────────
     logger.info("Shutting down gateway…")
     fine_tuner_task.cancel()
+    # Flush pending usage-counter writes before the event loop goes away.
+    await app.state.key_store.drain()
     await registry.shutdown()
     await close_http_client()
     logger.info("Gateway stopped.")
