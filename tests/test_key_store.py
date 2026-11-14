@@ -26,7 +26,10 @@ async def store(temp_db):
     await init_db()
     ks = KeyStore()
     await ks.startup(frozenset())
-    return ks
+    yield ks
+    # record_usage() flushes in the background; let those writes finish so no
+    # aiosqlite worker thread is left alive when the interpreter exits.
+    await ks.drain()
 
 
 class TestBootstrap:

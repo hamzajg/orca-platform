@@ -78,6 +78,9 @@ class KeyStore:
         # key → ApiKey (hot lookup path)
         self._keys: dict[str, ApiKey] = {}
         self._lock = asyncio.Lock()
+        # Strong refs to fire-and-forget DB writes, so they are not garbage
+        # collected mid-flight and can be awaited on shutdown (see drain()).
+        self._background: set[asyncio.Task] = set()
 
     # ── Startup ───────────────────────────────────────────────────────────────
 
@@ -233,7 +236,24 @@ class KeyStore:
         key_obj.last_used = now
         key_obj.request_count += 1
         # Async DB write — don't await at call site
-        asyncio.create_task(self._flush_usage(key_obj.key_hash, now, key_obj.request_count))
+        task = asyncio.create_task(
+            self._flush_usage(key_obj.key_hash, now, key_obj.request_count)
+        )
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
+    async def drain(self) -> None:
+        """
+        Wait for every pending background DB write to finish.
+
+        The flush tasks open their own SQLite connection; if the process
+        (or the event loop) exits while one is still pending, the aiosqlite
+        worker thread is never stopped and the interpreter hangs at exit.
+        That is what made `pytest` sit there after the last test passed.
+        """
+        while self._background:
+            pending = list(self._background)
+            await asyncio.gather(*pending, return_exceptions=True)
 
     async def _flush_usage(self, key_hash: str, last_used: datetime, count: int) -> None:
         try:
