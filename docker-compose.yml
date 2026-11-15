@@ -8,8 +8,14 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Persist SQLite database across restarts
-      - ./data:/app/data
+      # Persist SQLite database across restarts. A named volume, not a
+      # ./data bind mount: the image runs as uid 1000 ("gateway"), and on a
+      # fresh clone Docker creates a missing bind-mount directory owned by
+      # root, so SQLite could not open the file and the app exited during
+      # startup with "unable to open database file". Docker seeds a named
+      # volume from the image's /app/data, which is already owned by the
+      # container user.
+      - orca-data:/app/data
       # Live-reload config files without rebuilding the image
       - ./nodes.yaml:/app/nodes.yaml:ro
       - ./models.yaml:/app/models.yaml:ro
@@ -27,3 +33,6 @@ services:
     # Use host network if your workers are on the same LAN (simplest option)
     # network_mode: host
     # Or use bridge (default) and make sure worker IPs are routable from container
+
+volumes:
+  orca-data:
