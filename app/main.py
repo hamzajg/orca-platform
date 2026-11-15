@@ -38,6 +38,7 @@ from app.routers.metrics import router as metrics_router
 from app.routers.models import router as models_router
 from app.routers.custom import router as custom_router
 from app.routers.openai_compat import router as openai_router
+from app.routers.agent import router as agent_router
 from app.routers.fine_tune import router as fine_tune_router
 from app.services.fine_tuner import fine_tuner
 from app.services.key_store import KeyStore
@@ -143,6 +144,7 @@ app.include_router(models_router)   # /api/models/*
 app.include_router(metrics_router)  # /api/metrics/*
 app.include_router(custom_router)   # /api/*
 app.include_router(fine_tune_router) # /api/fine-tune/*
+app.include_router(agent_router)     # /api/agent/*
 
 
 # ── Static files ─────────────────────────────────────────────────────────────
