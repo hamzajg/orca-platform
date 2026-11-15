@@ -39,11 +39,11 @@ to `data/platform.db` (SQLite, auto-created).
 - `app/middleware/` — `auth.py` (API-key dependency), `request_id.py`.
 - `app/routers/` — `openai_compat.py` (`/v1/*`), `custom.py` (`/api/nodes`,
   `/api/models`, `/api/health`), `fine_tune.py`, `metrics.py`, `admin.py`,
-  `models.py`, `ollama_compat.py`.
+  `models.py`, `ollama_compat.py`, `agent.py` (`/api/agent/chat`).
 - `app/services/` — `node_registry`/discovery (node pool, health loop,
   round-robin), `proxy` (httpx + SSE relay to workers), `logger` /
   `audit_log` (SQLite request log), `key_store`, `metrics`, `fine_tuner`
-  (background subprocess jobs).
+  (background subprocess jobs), `agent` (in-gateway tool-calling loop).
 - `frontend/` — React admin UI (Vite build; served separately or via
   `app/static` in docker).
 

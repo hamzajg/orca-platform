@@ -15,6 +15,9 @@ FastAPI gateway (app/main.py, :8000)
   ├─ routers/custom          /api/nodes, /api/models, /api/health
   ├─ routers/fine_tune       /api/fine-tune/jobs* (background subprocesses)
   ├─ routers/admin, metrics, models, ollama_compat
+  ├─ routers/agent             /api/agent/chat (in-gateway assistant, tool loop)
+  └─ services/agent            Ollama /api/chat tool-calling loop +
+                               read-only tools over registry/metrics/fine_tuner
   └─ services/
        ├─ discovery / node pool   nodes.yaml → registry, health loop, round-robin
        ├─ proxy                   httpx async forward + SSE relay to workers
