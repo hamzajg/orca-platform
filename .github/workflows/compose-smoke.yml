@@ -1,0 +1,72 @@
+name: Compose smoke test
+
+# orca-platform's compose file reads `env_file: .env`, which is not committed,
+# so the stack cannot start from a fresh clone without one. This job copies the
+# committed .env.example first and then checks the gateway answers its own
+# liveness probe.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Gateway answers /api/health from compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Provide the env file the compose file requires
+        run: cp .env.example .env
+
+      - name: Build and start the stack
+        run: docker compose up --build --detach
+
+      - name: Wait for GET /api/health
+        run: |
+          set -uo pipefail
+          for attempt in $(seq 1 60); do
+            code=$(curl --silent --output /tmp/health.json --write-out '%{http_code}' \
+              http://localhost:8000/api/health || true)
+            echo "attempt ${attempt}: ${code}"
+            if [ "${code}" = "200" ]; then exit 0; fi
+            sleep 5
+          done
+          echo "::error::the gateway never answered /api/health"
+          exit 1
+
+      - name: Health payload is JSON
+        run: |
+          set -euo pipefail
+          curl --silent --show-error http://localhost:8000/api/health | tee /tmp/health.json
+          echo
+          grep --quiet '{' /tmp/health.json
+
+      - name: API metadata endpoint is served
+        # There is no route at /, so /api/info is the cheap proof that the
+        # routers are mounted and not just the liveness stub.
+        run: |
+          set -euo pipefail
+          code=$(curl --silent --output /tmp/info.json --write-out '%{http_code}' \
+            http://localhost:8000/api/info)
+          echo "GET /api/info -> ${code}"
+          test "${code}" = "200"
+          grep --quiet '{' /tmp/info.json
+
+      - name: Container logs
+        if: always()
+        run: docker compose logs --no-color --tail 100
+
+      - name: Tear down
+        if: always()
+        run: docker compose down --volumes --remove-orphans
